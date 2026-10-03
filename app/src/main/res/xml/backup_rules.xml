@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11 and older: the account (server token) is not backed up. -->
-<full-backup-content>
-    <exclude domain="sharedpref" path="account_secure.xml" />
-</full-backup-content>

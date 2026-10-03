@@ -29,6 +29,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
+/** Whether a puzzle record from the server is safe to turn into local file paths: its ids must not be able to climb out of the app's folder ("../"). */
+fun isSafePuzzleRecord(localId: String, photoId: String): Boolean {
+    val safe = Regex("[A-Za-z0-9_-]{1,64}")
+    return safe.matches(localId) && (photoId.isEmpty() || safe.matches(photoId))
+}
+
 /** What a sync moved: items sent to the server and items brought back from it. */
 data class SyncReport(val uploaded: Int, val downloaded: Int)
 
@@ -106,7 +112,8 @@ class SyncRepository @Inject constructor(
 
         replayDeletions(server, token, session.userId)
         applyRemoteDeletions(server, token)
-        val remote = client.list(server, token, "puzzles").associateBy { it.getString("localId") }
+        val remote = client.list(server, token, "puzzles").filter { isSafePuzzleRecord(it.getString("localId"), it.optString("photoId")) }
+            .associateBy { it.getString("localId") }
         val local = projectDao.getAllProjects().first()
 
         for (p in local) {

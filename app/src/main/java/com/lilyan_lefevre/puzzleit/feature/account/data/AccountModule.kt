@@ -29,6 +29,7 @@ object AccountModule {
     @Provides
     @Singleton
     fun provideHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .followSslRedirects(false) // never follow an https -> http redirect: the token would cross in clear
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
