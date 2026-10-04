@@ -23,7 +23,7 @@ docker compose up -d --build
 docker compose exec puzzleit /pb/pocketbase superuser upsert you@example.com a-long-password --dir /pb/pb_data   # admin of the dashboard
 ```
 
-The server listens on port 8090. The dashboard is at `http://<address>:8090/_/`. The app signs in to **one** server, the one built into it
+The server listens on port 8090, bound to `127.0.0.1` of the host (see *Admin access* below): the dashboard is at `http://localhost:8090/_/` through an SSH tunnel. The app signs in to **one** server, the one built into it
 (`https://puzzleit.lilyan.app`, `PUZZLEIT_SERVER` in `app/build.gradle.kts`). To try a local build against another one:
 `./gradlew installDebug -PpuzzleitServer=http://192.168.1.20:8090`.
 
@@ -83,7 +83,7 @@ The sign-in itself is PocketBase's OAuth2 flow (the app opens the provider's pag
 1. [Google Cloud console](https://console.cloud.google.com) > APIs & Services > OAuth consent screen: configure it (external, your own email as test user is enough while it
    is not published). Credentials > *Create credentials* > *OAuth client ID* > type **Web application**, with the authorized redirect URI
    `https://puzzleit.your-domain.com/api/oauth2-redirect`.
-2. PocketBase dashboard > Collections > `users` > settings (cog) > Authentication > **OAuth2** on, *Add provider* > Google, paste the client ID and secret.
+2. PocketBase dashboard (through the SSH tunnel, see *Admin access*) > Collections > `users` > settings (cog) > Authentication > **OAuth2** on, *Add provider* > Google, paste the client ID and secret.
 3. Reopen the login screen of the app: the Google button appears. After agreeing in the browser, come back to the app (the browser stays on a "you can close this page" page).
 
 A person who signs in with Google gets a normal account on the server; a provider's account is matched with an existing one by email. Keep the sign-up by password
@@ -91,6 +91,20 @@ locked (below) if only the people you invited should get in: OAuth sign-ups are 
 
 `POCKETBASE_OAUTH_URL=http://127.0.0.1:8090 ./gradlew testDebugUnitTest --tests "*OAuthIntegrationTest*"` runs that flow against a local server that has a **fake**
 Google provider (client ID `dummy`): it checks the list of providers, the realtime handshake and that the code reaches the server, which then fails to trade it with Google.
+
+## Admin access (dashboard, settings, backups) is not on the internet
+
+The port is published on `127.0.0.1` only, and [`pb_hooks/private_admin.pb.js`](pb_hooks/private_admin.pb.js) hides the admin API from everything that arrives through the Cloudflare
+Tunnel (it recognises it by the `CF-Connecting-IP` header): from the internet only the `users` and app collections answer, the superuser login, `/api/settings`, `/api/backups`,
+`/api/logs`, `/api/collections/<anything else>` and `/api/batch` return 404. The static `/_/` page is still served but cannot sign in. To administer, forward the port over SSH
+(this is a *local port forward*):
+
+```bash
+ssh -L 8090:127.0.0.1:8090 raspi      # leave it open, then browse http://localhost:8090/_/
+```
+
+`PUZZLEIT_BIND=0.0.0.0` in `.env` opens the port to the home network (for a test phone on Wi-Fi), `ADMIN_PUBLIC=1` lifts the filter (not advised).
+Rate limits (20 sign-in attempts a minute, 300 API calls per 10 s, per IP) come from [`4_rate_limits.js`](pb_migrations/4_rate_limits.js). The containers run read-only with no capabilities.
 
 ## Keep it safe
 
