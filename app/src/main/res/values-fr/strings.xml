@@ -10,6 +10,9 @@
     <string name="project_created_successfully">Projet "%s" créé !</string>
     <string name="puzzle_name">Nom du puzzle</string>
     <string name="number_of_pieces">Nombre de pièces</string>
+    <string name="clear_field">Effacer</string>
+    <string name="rows_hint">Lignes</string>
+    <string name="cols_hint">Colonnes</string>
     <string name="create_project">Créer le projet</string>
     <string name="cancel">Annuler</string>
     <string name="please_enter_project_name">Veuillez entrer un nom de projet</string>
@@ -150,6 +153,8 @@ Commence par une photo de la boîte.</string>
     <string name="continue_with">Continuer avec %1$s</string>
     <string name="email_hint">E-mail</string>
     <string name="password_hint">Mot de passe (8 caractères ou plus)</string>
+    <string name="show_password">Afficher</string>
+    <string name="hide_password">Masquer</string>
     <string name="sign_in">Se connecter</string>
     <string name="create_account">Créer le compte</string>
     <string name="sign_out">Se déconnecter</string>

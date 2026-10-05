@@ -1,6 +1,6 @@
 # PuzzleHelper (PuzzleIt)
 
-Android app (Kotlin, XML + Material 3, Hilt, Room, CameraX, OpenCV for box framing). Recognition is 100 % on the phone; sign-in to the owner's own server (PocketBase) is required and keeps the puzzles in sync (see Known limits).
+Android app (Kotlin, Jetpack Compose + Material 3, Hilt, Room, CameraX, OpenCV for box framing). Recognition is 100 % on the phone; sign-in to the owner's own server (PocketBase) is required and keeps the puzzles in sync (see Known limits).
 Photograph a loose puzzle piece -> the app shows where it goes on the box image and how to turn it.
 The owner speaks French: talk to them in French; code, comments and commit messages in English.
 
@@ -16,11 +16,11 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 
 ## Code map (`app/src/main/java/com/lilyan_lefevre/puzzleit`) - package by feature, MVVM
 - `core/database` (Room, migrations in one file, Hilt module), `core/image` (shared image helpers), `core/ui` (reusable
-  views). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
-- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, adapter,
+  Compose pieces: `theme/PuzzleTheme`, `PuzzleComponents`, `PuzzleLoader`, `FileImage`, `screen {}`; and the hand-drawn `QuadSelectionView`). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
+- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, `ProjectListScreen`,
   ProjectListViewModel), `create/` (ProjectCreation + PuzzleBounds fragments and ViewModels, BoxImageProcessor, GridProcessor).
 - `feature/puzzle/` the table: PuzzleWorkingFragment + ViewModel (`ScanState`, follows the project live, edit/delete),
-  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureFragment + ScanFrameView.
+  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureFragment + `PieceCaptureScreen` (the viewfinder is drawn in Compose).
 - `feature/recognition/` `PieceReranker.kt` + `OnnxEmbedder.kt` (assets/reranker.onnx: embeddings of the piece and of the box squares), `PieceSegmenter.kt` + `OnnxSegmenter.kt`
   (assets/segmenter.onnx = U2-Net-small cuts the piece out; table-colour segmentation is the fallback), `PieceMatcher.kt` - the algorithm, pure Kotlin (JVM-testable): grid pre-cut,
   segmentation, **whole-box network search** (`buildIndex` = embeddings of every half-cell square, built in the background by `PieceRecognizer` and cached next to the reference
@@ -45,7 +45,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   Tests run signed in on throw-away prefs: `TestAccountModule` (androidTest and test source sets) replaces `AccountModule` through Hilt; `ProjectSetupTest` is a Hilt Robolectric test for that reason (no Android Keystore on the JVM).
 - Fragments only render state, handle system intents and navigate; IO, image work and validation live in ViewModels
   or injected classes.
-- Docs: `documentation/` (French, numbered pages: the science 01-06, validation 07, AI experiment 08) and
+- Docs: `documentation/` (French, numbered pages: the science 01-06, validation 07, AI experiment 08, Compose UI 09) and
   `documentation/screenshots` (README images). No other docs folder.
 
 ## Code conventions (follow the existing patterns)
@@ -56,23 +56,23 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   after handling (`errorShown()`, `savedHandled()`). Live data from Room: `repository.flow().stateIn(viewModelScope, ...)`.
 - **Errors**: string resource ids (`@StringRes Int`), never hard-coded text; every string exists in `values` and
   `values-fr`.
-- **Fragments**: ViewBinding with `_binding` nulled in `onDestroyView`; collect in
-  `viewLifecycleOwner.lifecycleScope.launch { repeatOnLifecycle(STARTED) { launch { ... } } }`; navigation with nav
-  graph actions; transitions `MaterialSharedAxis` X between screens, Y for the camera.
-- **Result sheet**: a real `BottomSheetBehavior` with four levels - peek (the leads with their %), half (piece next to the box), full ("why these leads" cards with the blinking `LeadComparisonView`), hidden (the map is free, a "Leads" pill brings it back). Its on-screen position is `getLocationOnScreen`, NOT `top` (the behaviour moves it without changing the layout `top`); set levels in an `OnPreDrawListener` once the new state is laid out. No rows x columns anywhere in the UI (unknown before the border is complete): the position is a zone + percentages.
+- **Screens (Compose, see `documentation/09-compose.md`)**: each screen is a stateless `@Composable XScreen(data..., onAction...)` next to its Fragment; the Fragment only navigates, asks permissions,
+  shows Toasts and returns `screen { ... }` from `onCreateView` (state read with `collectAsStateWithLifecycle()`). No ViewBinding, no `res/layout`. Navigation with nav graph actions;
+  transitions `MaterialSharedAxis` X between screens, Y for the camera. Every screen has a `@Preview` and `testTag`s named like the old view ids (tests and the demo recorder use them).
+  Screens use `core/ui` components (`PrimaryButton`, `RoundIconButton`...), never a raw Material button.
+- **Result sheet**: `LevelSheet` / `LevelSheetState` (own drag + nested-scroll code, not Material's sheet) with four levels - peek (the leads with their %), half (piece next to the box), full ("why these leads" cards with the blinking `LeadComparison`), hidden (the map is free, a "Leads" pill brings it back). The peek and half heights are measured in `ResultContent` (`onGloballyPositioned`) and become the anchors; the map's bottom inset follows the level. No rows x columns anywhere in the UI (unknown before the border is complete): the position is a zone + percentages.
 - **Threading**: IO / image work in injected `@Singleton` classes with `withContext(Dispatchers.IO|Default)`; Bitmaps
   are decoded with a size cap (`inSampleSize`).
-- **Custom views**: draw everything in `onDraw` (no child views), one infinite `ValueAnimator` clock started/stopped in
-  attach/detach, colours from `R.color`.
+- **Custom drawing**: in Compose, a `Canvas` with one `rememberInfiniteTransition` clock (`PuzzleLoader`, `LeadComparison`, the viewfinder). `PuzzleMapView`, `QuadSelectionView` and CameraX's `PreviewView` stay
+  Views (gestures / camera), wrapped by `PuzzleMap`, `PuzzleBoundsScreen` and `PieceCaptureScreen` with `AndroidView`; their View code keeps the old rule (everything in `onDraw`, colours from `R.color`).
 - **Comments**: KDoc one-liner on each class saying what it is for; inline comments only for the non-obvious *why*.
   Imports sorted, no unused ones, no wildcard imports of project packages.
-- **UI design**: dark "puzzle night" theme only. Use the tokens, not raw values: colours `puzzle_*` (`background`,
-  `surface`, `surface_high`, `outline`, `primary` = citron accent, `secondary` = violet, `warning`, `error`),
-  font `@font/space_grotesk_family`, text styles `Text.Display` (titles) / `Text.Eyebrow` (small caps labels), widgets
-  `Widget.Puzzle.Button`, `Widget.Puzzle.IconButton` (48dp round buttons on the map), `Widget.Puzzle.Chip`,
-  shapes `Shape.Puzzle.Small/Medium/Large` (12/20/28dp). Bottom sheet = `bg_sheet`, rounded 32dp top corners.
+- **UI design**: dark "puzzle night" theme only. Use the tokens, not raw values: colours `puzzle_*` in `values/colors.xml` (read by `PuzzleTheme` through `MaterialTheme.colorScheme`: `background`,
+  `surface`, `surfaceVariant` = surface_high, `outline`, `primary` = citron accent, `secondary` = violet, `error`; `PuzzleColors` for `warning` / `scrim` / `secondaryText`),
+  font Space Grotesk (in the theme), `PuzzleText.display(size)` (titles) / `PuzzleText.eyebrow` (small caps labels), `RoundIconButton` (48dp round buttons), `PrimaryButton` / `TonalButton`,
+  shapes 12/20/28dp (`MaterialTheme.shapes`). Bottom sheet: surface, 1dp outline, rounded 32dp top corners (`LevelSheet`).
   Animate state changes (`TransitionManager`, `animate()`), keep motion short (300-900 ms).
-- **Tests**: JVM tests for algorithm logic (one runnable check per non-trivial piece of logic), Espresso e2e tests for
+- **Tests**: JVM tests for algorithm logic (one runnable check per non-trivial piece of logic), Compose e2e tests (`createEmptyComposeRule`, nodes by `testTag`) for
   user journeys with `waitFor { ... }` polling instead of sleeps for async states; e2e tests seed their own data.
 
 ## Working with the owner
@@ -126,9 +126,8 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 
 ## Release
 - Tag `v<versionName>` (`app/build.gradle.kts`) -> `.github/workflows/release.yml` builds the signed APK and creates the GitHub release.
-  Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.);
-  without them `assembleRelease` gives an unsigned APK. The keystore and its passwords are in `C:\Users\Lilyan\.android-keys\` (outside the
-  repo, never commit them; lose the key and no update can be installed over an existing install: tell the owner to back it up).
+  Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.); without them `assembleRelease` gives an unsigned APK.
+  The keystore lives outside the repo (never commit it; lose the key and no update can be installed over an existing install: tell the owner to back it up). Where it is: `CLAUDE.local.md`.
 - `assembleRelease` needs the network (lint-gradle is not in the offline cache). The APK is ~220 MB (ONNX Runtime + OpenCV for 4 ABIs).
 
 ## Benchmarks (opt-in JVM tests, not in CI; data rebuilt by scripts)
@@ -149,26 +148,22 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - `PUZZLE_DUMP_DIR` makes the first two export each piece + the top-30 leads (`LeadDump`) for off-device experiments.
 
 ## Remote PC (heavy work: AI, long benchmarks)
-- `ssh pc` (key auth, alias in `~/.ssh/config`): Windows 11, Ryzen 5 7600X, 32 GB, **AMD Radeon RX 6800** -> PyTorch via
-  **DirectML** (`torch-directml`), not CUDA/ROCm. Default remote shell is `cmd.exe`.
-- `C:\dev\PuzzleHelper` (git clone of the public repo), `C:\dev\venv-puzzle` (Python 3.12: torch-directml, torchvision,
-  pillow, numpy), `C:\dev\data` (benchmark data + dumps, sent with `tar -cf - ... | ssh pc "tar -xf - -C C:/dev/data"`).
-- Run: `ssh pc 'cd /d C:\dev && venv-puzzle\Scripts\python <script> ...'`. Python on the Mac is a python.org build
-  without certificates: download with `curl`, not `urllib`.
-- Emulator: Android SDK in `%LOCALAPPDATA%\Android\Sdk`, AVD `puzzle34` (API 34 google_apis x86_64, WHPX). Start it
-  with `ssh pc 'powershell -ExecutionPolicy Bypass -File C:\dev\PuzzleHelper\tools\pc\start_emulator.ps1'` (launched
-  through WMI: OpenSSH kills its children on logout; session 0 has no GPU, hence swiftshader), then
-  `ssh pc 'C:\dev\PuzzleHelper\tools\pc\instrumented.cmd'` (pulls `main`, runs `connectedDebugAndroidTest`).
-  Error dialogs must stay hidden: a first-boot system ANR stole the window focus and failed 7 tests.
+- A remote Windows PC with an AMD GPU (PyTorch via DirectML) runs the AI experiments and the long benchmarks; how to reach it and what is on it: `CLAUDE.local.md` (not versioned).
 
 ## Known limits / next steps
+### State on 2026-10-13 (UI in Compose)
+- The whole UI is Jetpack Compose (PR #5, squash-merged): 9 Fragments kept as hosts (`screen { XScreen(...) }`), no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
+  Verified: JVM unit tests, the 12 `ScanFlowTest` journeys on an API 34 emulator (one at a time: the Intel Mac's emulator is slow, disable Google Play services on the AVD or it ANRs), CI on Pixel 6 + small phone, the owner built and tried it.
+  **Not verified**: `DemoTourTest` (ported to the accessibility tree + `input` events, never run), a real phone, creating a puzzle with the real camera, the corner framing.
+- README images and video (`documentation/screenshots`) still show the old UI: regenerate them with `DemoTourTest` (needs the phone or the emulator and `-e demoPuzzle`).
+- **Next: Navigation Compose** (separate PR, after the owner validated and merged PR #5): replace `nav_graph.xml` + Fragments by a `NavHost` in `MainActivity` (needs `navigation-compose` and `hilt-navigation-compose`). To redo: Safe Args -> typed routes, `setFragmentResult` (framing, camera) -> `savedStateHandle`, `MaterialSharedAxis` transitions -> Compose transitions, the e2e photo injection (it uses the fragment-result channel), the camera's lifecycle binding, `MainActivity.ownHeader` and the login redirect.
+- Local build: the project lives in iCloud Documents; `app/build`, `build` and `.kotlin` are `*.nosync` folders with symlinks (ignored by git) so iCloud stops adding "* 2" copies. If a build still fails on one: `rm -rf app/build.nosync/*`.
+
 ### State on 2026-10-11 (before v0.2.0)
-- v0.1.0 released (signed APK on GitHub, release.yml; keystore in `C:\Users\Lilyan\.android-keys\`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
+- v0.1.0 released (signed APK on GitHub, release.yml; keystore: see `CLAUDE.local.md`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
   bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag `v0.2.0`. Done since v0.1.0: mandatory login (+ Google and other providers), production server built in, retake of the box photo
   (create and edit), double back arrows fixed, sync gaps closed (deletions, box photo, latest edit), new app icon (supplied PNGs, adaptive icon built with a 12 % inset; no monochrome/themed icon yet).
-- Server **in production**: PocketBase on the owner's Raspberry Pi (host `limar`, `ssh raspi` works with `~/.ssh/id_ed25519_raspi`, user `lilyan`, 64-bit, Docker), behind a Cloudflare Tunnel at `https://puzzleit.lilyan.app`.
-  A push touching `server/` rebuilds the image (GHCR, public package) and a GitHub self-hosted runner on the Pi redeploys it (`.github/workflows/server.yml`, clone in `~/PuzzleIt`; documented in `server/README.md`).
-  The Pi's old services (gitea, mailhog, portainer, traefik, gitea-runner) were removed at the owner's request, their data folders are left in `/home/docker`; `code-server` and `whoami` containers are still there (the owner asked to remove them, the permission classifier refused: they run it themselves).
+- Server **in production**: PocketBase on the owner's own server behind a Cloudflare Tunnel; a push touching `server/` rebuilds the image and a self-hosted runner redeploys it (`.github/workflows/server.yml`, documented in `server/README.md`). Hosts, SSH and what runs there: `CLAUDE.local.md`.
   The Google provider still has to be configured by the owner (Google Cloud OAuth client + PocketBase dashboard, steps in `server/README.md`); until then the login screen shows no provider button. Sign-up by password must be locked once their account exists.
 - Verified against a real local PocketBase (download its release, check the checksum, `pocketbase serve --dir <tmp> --migrationsDir server/pb_migrations --http=127.0.0.1:8095`; port 8090 is taken on the owner's PC), then
   `POCKETBASE_URL=http://127.0.0.1:8095 ./gradlew testDebugUnitTest --tests "*SyncIntegrationTest*"` (3 scenarios) and, with a fake Google provider enabled by a temporary migration, `POCKETBASE_OAUTH_URL=... --tests "*OAuthIntegrationTest*"`.
@@ -188,9 +183,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. Pablo Moreira's DINOv2 piece classifier
   (363 MB, not embeddable) finds the white-gutter piece our model never finds: a patch-level cross-attention head is the research lead.
 - The box index (up to ~3,900 embeddings for 1,000 pieces) is built in the background on the phone: its build time there is not measured yet.
-- When a session runs on the owner's PC (not the Mac), the data is in `C:\dev\data` (`real`, `pm4` = Puzzle-Map, `bank`, `train-images`) and the venv in `C:\dev\venv-puzzle`.
-- The project lives in iCloud Documents: iCloud creates `* 2.*` duplicates in `app/build` and Gradle fails in
-  `parseDebugLocalResources`. Fix: `rm -rf app/build`. Moving the project out of iCloud would fix it for good.
+- The project lives in iCloud Documents: iCloud used to create `* 2.*` duplicates in `app/build` and Gradle failed (`parseDebugLocalResources`, `hiltJavaCompileDebug`). The build folders are now `*.nosync` (see the 2026-10-13 state); moving the project out of iCloud would fix it for good.
 - onnxruntime sessions run WITHOUT memory pattern and CPU arena (`OnnxEmbedder`, `OnnxSegmenter`): the batches have many different sizes and
   with them native memory grew 30 MB per scan (408 MB after the box index) until a 2 GB device killed the app. `PieceRecognizerDeviceTest` prints the memory.
 - Leads 2-4 get a derived confidence (best confidence scaled by their own score).

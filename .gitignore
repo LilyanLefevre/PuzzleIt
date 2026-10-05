@@ -19,3 +19,9 @@ __pycache__/
 .externalNativeBuild
 .cxx
 local.properties
+
+# Not versioned: infra details of the owner
+CLAUDE.local.md
+
+# iCloud: build output renamed *.nosync (with a symlink) is not synced, no more "* 2" duplicates
+*.nosync

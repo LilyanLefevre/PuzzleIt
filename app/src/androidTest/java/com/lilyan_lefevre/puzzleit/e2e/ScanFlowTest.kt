@@ -1,24 +1,22 @@
 package com.lilyan_lefevre.puzzleit.e2e
 
 import android.Manifest
-import android.view.View
-import android.view.ViewGroup
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performTextInput
 import androidx.core.os.bundleOf
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.replaceText
-import androidx.test.espresso.action.ViewActions.scrollTo
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.RootMatchers.isPlatformPopup
-import androidx.test.espresso.matcher.ViewMatchers.isChecked
-import androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -29,8 +27,6 @@ import com.lilyan_lefevre.puzzleit.feature.project.data.ProjectRepository
 import com.lilyan_lefevre.puzzleit.feature.puzzle.capture.PieceCaptureFragment
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
-import org.hamcrest.CoreMatchers.allOf
-import org.hamcrest.CoreMatchers.containsString
 import org.junit.After
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -44,7 +40,8 @@ import kotlinx.coroutines.runBlocking
 /**
  * Whole journey on the phone: list -> puzzle table -> (injected) piece photo -> result sheet -> leads -> dismiss.
  * The photo is injected through the same fragment-result channel the camera screen uses, so everything
- * downstream of the shutter is the real code. Run with animations off (see CI script / README).
+ * downstream of the shutter is the real code. The screens are Compose: nodes are found by their `testTag`
+ * (the names the old view ids had). Run with animations off (see CI script / README).
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -52,6 +49,7 @@ class ScanFlowTest {
 
     @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
     @get:Rule(order = 1) val camera: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.CAMERA)
+    @get:Rule(order = 2) val compose = createEmptyComposeRule()
 
     @Inject lateinit var repository: ProjectRepository
 
@@ -89,9 +87,11 @@ class ScanFlowTest {
         }
     }
 
+    private fun shown(tag: String) = compose.onNodeWithTag(tag).assertIsDisplayed()
+
     /** Screenshots land in the app's external files dir: adb pull /sdcard/Android/data/<pkg>/files/shots */
     private fun shot(scenario: ActivityScenario<MainActivity>, label: String) {
-        // PixelCopy of the activity window: unlike UiAutomation it doesn't disturb Espresso's window focus.
+        // PixelCopy of the activity window: unlike UiAutomation it doesn't disturb the window focus.
         var window: android.view.Window? = null
         scenario.onActivity { window = it.window }
         val w = window ?: return
@@ -103,12 +103,13 @@ class ScanFlowTest {
         java.io.FileOutputStream(File(dir, "$label.png")).use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    private fun idle(): Boolean = compose.onAllNodesWithTag("buttonCapturePiece").fetchSemanticsNodes().isNotEmpty()
+
     /**
      * The photo goes through the channel the camera screen uses. The table ignores it until its matcher is prepared, so it is
      * sent again until the screen leaves the idle state (a person needs seconds to take a photo; the test needs milliseconds).
      */
     private fun inject(scenario: ActivityScenario<MainActivity>, photo: File) {
-        fun idle(): Boolean { var v = true; scenario.onActivity { v = it.findViewById<View>(R.id.groupIdle).visibility == View.VISIBLE }; return v }
         waitFor(30_000) {
             if (idle()) {
                 scenario.onActivity { a: FragmentActivity ->
@@ -122,18 +123,20 @@ class ScanFlowTest {
     }
 
     private fun openTable() = ActivityScenario.launch(MainActivity::class.java).also {
-        waitFor { onView(withText(name)).check(matches(isDisplayed())) }
-        onView(withText(name)).perform(click())
-        waitFor { onView(withId(R.id.buttonCapturePiece)).check(matches(isDisplayed())) }
+        waitFor { compose.onNodeWithText(name).assertIsDisplayed() }
+        compose.onNodeWithText(name).performClick()
+        waitFor { shown("buttonCapturePiece") }
     }
+
+    /** The chip of lead [n] in the row of chips (the cards below also say "Lead n"). */
+    private fun chip(n: Int) = compose.onNodeWithTag("chipLead$n")
 
     @Test
     fun listShowsProjectAndTableShowsGrid() {
         openTable().use { scenario ->
             // The project loads asynchronously: wait for it instead of asserting on the first frame.
-            waitFor { onView(withId(R.id.textViewProjectName)).check(matches(withText(name))) }
-            waitFor { onView(withId(R.id.textViewProjectInfo)).check(matches(withText(containsString("${cols * rows}")))) }
-            onView(withId(R.id.mapView)).check(matches(isDisplayed()))
+            waitFor { compose.onNodeWithTag("textViewProjectName").assertTextEquals(name) }
+            waitFor { compose.onNodeWithTag("textViewProjectInfo").assertTextContains("${cols * rows}", substring = true) }
             Thread.sleep(800); shot(scenario, "1_table")
         }
     }
@@ -144,17 +147,17 @@ class ScanFlowTest {
             val photo = TestImages.save(TestImages.piecePhoto(art, cols, rows, 9, 6, 90f), ctx.cacheDir, "e2e_piece.jpg")
             inject(scenario, photo)
             // The analysing state is brief by design: catch it if we can, never fail on it.
-            runCatching { waitFor(3_000) { onView(withId(R.id.groupAnalyzing)).check(matches(isDisplayed())) }; shot(scenario, "2_analyzing") }
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            runCatching { waitFor(3_000) { shown("groupAnalyzing") }; shot(scenario, "2_analyzing") }
+            waitFor { shown("groupResult") }
             Thread.sleep(1800)   // let the camera move and the piece spin settle
             shot(scenario, "3_result")
-            onView(withId(R.id.textSpot)).check(matches(isDisplayed()))
-            onView(withId(R.id.chipLeads)).check(matches(isDisplayed()))
-            onView(allOf(withText(containsString(ctx.getString(R.string.alt_lead, 2))), isDescendantOfA(withId(R.id.chipLeads)))).perform(click())
-            waitFor { onView(withId(R.id.textLead)).check(matches(withText(containsString(ctx.getString(R.string.alt_lead, 2))))) }
+            shown("textSpot")
+            shown("chipLeads")
+            chip(2).performClick()
+            waitFor { compose.onNodeWithTag("textLead").assertTextContains(ctx.getString(R.string.alt_lead, 2).uppercase(), substring = true) }
             Thread.sleep(1200); shot(scenario, "4_second_lead")
-            onView(withId(R.id.buttonDismiss)).perform(scrollTo(), click())
-            waitFor { onView(withId(R.id.groupIdle)).check(matches(isDisplayed())) }
+            compose.onNodeWithTag("buttonDismiss").performScrollTo().performClick()
+            waitFor { shown("buttonCapturePiece") }
         }
     }
 
@@ -171,55 +174,44 @@ class ScanFlowTest {
         return h
     }
 
-    private fun sheetTop(scenario: ActivityScenario<MainActivity>): Float {
-        var y = 0f
-        scenario.onActivity {
-            val loc = IntArray(2); it.findViewById<View>(R.id.sheet).getLocationOnScreen(loc)
-            y = loc[1] + 24 * it.resources.displayMetrics.density
-        }
-        return y
-    }
+    /** A little under the top edge of the result sheet, on the grabber: where a finger takes hold of it. */
+    private fun sheetTop(): Float = compose.onNodeWithTag("sheet").fetchSemanticsNode().boundsInWindow.top + 24 * ctx.resources.displayMetrics.density
 
     @Test
     fun resultSheetSlidesFromPeekToFullAndAwayAndBack() {
         openTable().use { scenario ->
             inject(scenario, TestImages.save(TestImages.piecePhoto(art, cols, rows, 9, 6, 90f), ctx.cacheDir, "e2e_piece2.jpg"))
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            waitFor { shown("groupResult") }
             Thread.sleep(1800)
-            onView(withId(R.id.textSpot)).check(matches(isDisplayed()))               // half level: the comparison is visible
+            shown("textSpot")               // half level: the comparison is visible
             // Up to the full level: the page that explains the leads.
             shot(scenario, "5_half")
-            drag(scenario, sheetTop(scenario), 0.04f * screenHeight(scenario)); Thread.sleep(700)
+            drag(scenario, sheetTop(), 0.04f * screenHeight(scenario)); Thread.sleep(700)
             shot(scenario, "6_after_drag_up")
             // On a small screen the explanation page starts below the fold: scroll down to it.
-            scenario.onActivity { act -> act.findViewById<androidx.core.widget.NestedScrollView>(R.id.sheetScroll).fullScroll(View.FOCUS_DOWN) }
+            compose.onNodeWithTag("groupExplain").performScrollTo()
             Thread.sleep(400)
-            onView(withId(R.id.groupExplain)).check(matches(isDisplayed())); shot(scenario, "6_explain")
+            shown("groupExplain"); shot(scenario, "6_explain")
             // Freeze the first card's blinking and bring it into view: the piece must sit on the box where the lead says.
-            scenario.onActivity { act ->
-                act.findViewById<ViewGroup>(R.id.explainList).getChildAt(0).findViewById<View>(R.id.leadCompare).performClick()
-                act.findViewById<androidx.core.widget.NestedScrollView>(R.id.sheetScroll).scrollTo(0, 1150)
-            }
+            compose.onNodeWithTag("leadCompare0").performScrollTo().performClick()
             Thread.sleep(500); shot(scenario, "6b_explain_overlay")
             // All the way down: the last card must be whole above the bottom edge of the screen.
-            scenario.onActivity { act -> act.findViewById<androidx.core.widget.NestedScrollView>(R.id.sheetScroll).fullScroll(View.FOCUS_DOWN) }
+            compose.onNodeWithTag("explainCard2").performScrollTo()
             Thread.sleep(500); shot(scenario, "6c_explain_bottom")
-            scenario.onActivity { act -> act.findViewById<androidx.core.widget.NestedScrollView>(R.id.sheetScroll).scrollTo(0, 0) }
-            Thread.sleep(300)
-            scenario.onActivity { act -> act.findViewById<androidx.core.widget.NestedScrollView>(R.id.sheetScroll).scrollTo(0, 0) }
+            compose.onNodeWithTag("chipLeads").performScrollTo()
             Thread.sleep(300)
             // Away: a long swipe down takes the sheet off whatever the screen's size, the map is free and the button brings the leads back.
             // (The peek level is checked by the card test; on a small screen the half and full levels nearly coincide.)
             // The swipe is a shell command: on a slow CI emulator it can start while the sheet still moves, so it is repeated.
             waitFor {
-                if (runCatching { onView(withId(R.id.pillLeads)).check(matches(isDisplayed())) }.isFailure) {
-                    drag(scenario, sheetTop(scenario), 0.98f * screenHeight(scenario)); Thread.sleep(1500)
+                if (runCatching { shown("pillLeads") }.isFailure) {
+                    drag(scenario, sheetTop(), 0.98f * screenHeight(scenario)); Thread.sleep(1500)
                 }
-                onView(withId(R.id.pillLeads)).check(matches(isDisplayed()))
+                shown("pillLeads")
             }
             shot(scenario, "8_hidden")
-            onView(withId(R.id.pillLeads)).perform(click()); Thread.sleep(700)
-            onView(withId(R.id.textSpot)).check(matches(isDisplayed()))
+            compose.onNodeWithTag("pillLeads").performClick(); Thread.sleep(700)
+            shown("textSpot")
         }
     }
 
@@ -227,15 +219,15 @@ class ScanFlowTest {
     fun aLeadCardLeadsToThePuzzleWithThePieceOverIt() {
         openTable().use { scenario ->
             inject(scenario, TestImages.save(TestImages.piecePhoto(art, cols, rows, 9, 6, 90f), ctx.cacheDir, "e2e_piece3.jpg"))
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            waitFor { shown("groupResult") }
             Thread.sleep(1800)
-            drag(scenario, sheetTop(scenario), 0.04f * screenHeight(scenario)); Thread.sleep(700)             // the page that explains the leads
+            drag(scenario, sheetTop(), 0.04f * screenHeight(scenario)); Thread.sleep(700)             // the page that explains the leads
             // Tapping the second lead's card selects it and drops the sheet to its peek level, over the map.
-            scenario.onActivity { act -> act.findViewById<ViewGroup>(R.id.explainList).getChildAt(1).performClick() }
+            // Low on the card, on "See on the puzzle": the middle is the blinking comparison, whose tap only freezes it.
+            compose.onNodeWithTag("explainCard1").performScrollTo().performTouchInput { click(percentOffset(0.5f, 0.95f)) }
             Thread.sleep(1500)
-            onView(allOf(withText(containsString(ctx.getString(R.string.alt_lead, 2))), isDescendantOfA(withId(R.id.chipLeads)))).check(matches(isChecked()))
-            onView(withId(R.id.buttonOverlay)).check(matches(isDisplayed()))
-            onView(withId(R.id.mapView)).check(matches(isDisplayed()))
+            chip(2).assertIsSelected()
+            shown("buttonOverlay")
             shot(scenario, "9_card_to_map"); Thread.sleep(900); shot(scenario, "9b_card_to_map")
         }
     }
@@ -245,9 +237,9 @@ class ScanFlowTest {
         openTable().use { scenario ->
             val photo = TestImages.save(TestImages.blurred(TestImages.piecePhoto(art, cols, rows, 5, 5, 0f)), ctx.cacheDir, "e2e_blur.jpg")
             inject(scenario, photo)
-            waitFor { onView(withId(R.id.groupError)).check(matches(isDisplayed())) }
-            onView(withId(R.id.textErrorTitle)).check(matches(withText(R.string.blurry_title)))
-            onView(withId(R.id.buttonRetake)).check(matches(isDisplayed()))
+            waitFor { shown("groupError") }
+            compose.onNodeWithTag("textErrorTitle").assertTextEquals(ctx.getString(R.string.blurry_title))
+            shown("buttonRetake")
             shot(scenario, "5_blurry")
         }
     }
@@ -257,7 +249,7 @@ class ScanFlowTest {
         openTable().use { scenario ->
             val photo = TestImages.save(TestImages.emptyTable(), ctx.cacheDir, "e2e_empty.jpg")
             inject(scenario, photo)
-            waitFor { onView(withId(R.id.groupError)).check(matches(isDisplayed())) }
+            waitFor { shown("groupError") }
         }
     }
 
@@ -265,14 +257,14 @@ class ScanFlowTest {
     fun aScanIsRatedAndKeptInTheHistory() {
         openTable().use { scenario ->
             inject(scenario, TestImages.save(TestImages.piecePhoto(art, cols, rows, 9, 6, 90f), ctx.cacheDir, "e2e_piece4.jpg"))
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            waitFor { shown("groupResult") }
             Thread.sleep(1800)
-            onView(withId(R.id.buttonRight)).perform(scrollTo(), click())
-            onView(withId(R.id.textEvaluate)).check(matches(withText(R.string.evaluate_thanks)))
+            compose.onNodeWithTag("buttonRight").performScrollTo().performClick()
+            compose.onNodeWithTag("textEvaluate").assertTextEquals(ctx.getString(R.string.evaluate_thanks))
             Thread.sleep(500)                                                                  // the verdict is written in the background
-            onView(withId(R.id.buttonMore)).perform(click())
-            onView(withText(R.string.menu_history)).inRoot(isPlatformPopup()).perform(click())
-            waitFor { onView(withText(R.string.verdict_correct)).check(matches(isDisplayed())) }
+            compose.onNodeWithTag("buttonMore").performClick()
+            compose.onNodeWithText(ctx.getString(R.string.menu_history)).performClick()
+            waitFor { compose.onNodeWithText(ctx.getString(R.string.verdict_correct)).assertIsDisplayed() }
             shot(scenario, "10_history")
         }
     }
@@ -280,15 +272,15 @@ class ScanFlowTest {
     @Test
     fun signingOutBringsTheLoginScreenBackAndItChecksTheForm() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor { onView(withId(R.id.buttonAccount)).check(matches(isDisplayed())) }
-            onView(withId(R.id.buttonAccount)).perform(click())
-            waitFor { onView(withId(R.id.buttonSignOut)).check(matches(isDisplayed())) }
+            waitFor { shown("buttonAccount") }
+            compose.onNodeWithTag("buttonAccount").performClick()
+            waitFor { shown("buttonSignOut") }
             shot(scenario, "12_account")
-            onView(withId(R.id.buttonSignOut)).perform(click())
-            waitFor { onView(withId(R.id.editEmail)).check(matches(isDisplayed())) }
-            onView(withId(R.id.editPassword)).perform(replaceText("short"), closeSoftKeyboard())
-            onView(withId(R.id.buttonSignIn)).perform(scrollTo(), click())               // below the fold on a small screen
-            onView(withId(R.id.textNotice)).check(matches(withText(R.string.credentials_invalid)))
+            compose.onNodeWithTag("buttonSignOut").performClick()
+            waitFor { shown("editEmail") }
+            compose.onNodeWithTag("editPassword").performTextInput("short")
+            compose.onNodeWithTag("buttonSignIn").performScrollTo().performClick()               // below the fold on a small screen
+            compose.onNodeWithTag("textNotice").assertTextEquals(ctx.getString(R.string.credentials_invalid))
             shot(scenario, "13_login")
         }
     }
@@ -296,10 +288,10 @@ class ScanFlowTest {
     @Test
     fun progressScreenOpensFromTheMenu() {
         openTable().use { scenario ->
-            onView(withId(R.id.buttonMore)).perform(click())
-            onView(withText(R.string.menu_progress)).inRoot(isPlatformPopup()).perform(click())
-            waitFor { onView(withId(R.id.buttonAddPhoto)).check(matches(isDisplayed())) }
-            onView(withId(R.id.textEmpty)).check(matches(isDisplayed()))
+            compose.onNodeWithTag("buttonMore").performClick()
+            compose.onNodeWithText(ctx.getString(R.string.menu_progress)).performClick()
+            waitFor { shown("buttonAddPhoto") }
+            shown("textEmpty")
             shot(scenario, "11_progress")
         }
     }
@@ -307,30 +299,30 @@ class ScanFlowTest {
     @Test
     fun scanButtonOpensViewfinderAndBackReturns() {
         openTable().use {
-            onView(withId(R.id.buttonCapturePiece)).perform(click())
-            waitFor { onView(withId(R.id.shutter)).check(matches(isDisplayed())) }
-            onView(withId(R.id.previewView)).check(matches(isDisplayed()))
-            onView(withId(R.id.buttonClose)).perform(click())
-            waitFor { onView(withId(R.id.groupIdle)).check(matches(isDisplayed())) }
+            compose.onNodeWithTag("buttonCapturePiece").performClick()
+            waitFor { shown("shutter") }
+            shown("previewView")
+            compose.onNodeWithTag("buttonClose").performClick()
+            waitFor { shown("buttonCapturePiece") }
         }
     }
 
     @Test
     fun editFromTheTableOpensThePrefilledForm() {
         openTable().use {
-            onView(withId(R.id.buttonEdit)).perform(click())
-            waitFor { onView(withId(R.id.editTextName)).check(matches(withText(name))) }
-            onView(withId(R.id.editTextPieces)).check(matches(withText("${cols * rows}")))
+            compose.onNodeWithTag("buttonEdit").performClick()
+            waitFor { compose.onNodeWithTag("editTextName").assertTextContains(name) }
+            compose.onNodeWithTag("editTextPieces").assertTextContains("${cols * rows}")
         }
     }
 
     @Test
     fun deleteFromTableAsksThenRemovesTheProject() {
         openTable().use {
-            onView(withId(R.id.buttonDelete)).perform(click())
-            onView(withText(R.string.delete)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).perform(click())
-            waitFor { onView(withId(R.id.fabAddProject)).check(matches(isDisplayed())) }
-            waitFor { onView(withText(name)).check(androidx.test.espresso.assertion.ViewAssertions.doesNotExist()) }
+            compose.onNodeWithTag("buttonDelete").performClick()
+            compose.onNodeWithText(ctx.getString(R.string.delete)).performClick()
+            waitFor { shown("fabAddProject") }
+            waitFor { compose.onNodeWithText(name).assertDoesNotExist() }
             assertNull(runBlocking { repository.getProjectById(id) })
         }
     }

@@ -4,19 +4,21 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
-import com.bumptech.glide.Glide
 import com.lilyan_lefevre.puzzleit.R
 import com.lilyan_lefevre.puzzleit.core.image.ImageUtils
-import com.lilyan_lefevre.puzzleit.databinding.FragmentPuzzleBoundsBinding
+import com.lilyan_lefevre.puzzleit.core.ui.screen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -25,46 +27,34 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class PuzzleBoundsFragment : Fragment() {
 
-    private var _binding: FragmentPuzzleBoundsBinding? = null
-    private val binding get() = _binding!!
-
     private val args: PuzzleBoundsFragmentArgs by navArgs()
     private val viewModel: PuzzleBoundsViewModel by viewModels()
 
     @Inject lateinit var imageUtils: ImageUtils
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        _binding = FragmentPuzzleBoundsBinding.inflate(inflater, container, false)
-        return binding.root
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View = screen {
+        val detected by viewModel.detected.collectAsStateWithLifecycle()
+        PuzzleBoundsScreen(
+            imagePath = args.imagePath,
+            sourceSize = remember { imageUtils.readOrientedDimensions(args.imagePath) },
+            detected = detected,
+            onCancel = { findNavController().navigateUp() },
+            onConfirm = { viewModel.confirm(args.imagePath, it) },
+        )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val (w, h) = imageUtils.readOrientedDimensions(args.imagePath)
-        binding.quadSelectionView.setSourceSize(w, h)
-        Glide.with(this).load(args.imagePath).fitCenter().into(binding.imageView)   // Glide applies EXIF rotation
-
-        binding.btnCancel.setOnClickListener { findNavController().navigateUp() }
-        binding.btnConfirm.setOnClickListener { viewModel.confirm(args.imagePath, binding.quadSelectionView.getNormalizedQuad()) }
-
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { viewModel.detected.collect { quad -> quad?.let(binding.quadSelectionView::setNormalizedQuad) } }
-                launch {
-                    viewModel.confirmed.collect { b ->
-                        b ?: return@collect
-                        setFragmentResult(RESULT_KEY, bundleOf(QUAD_JSON to b.quadJson, RECTIFIED_PATH to b.rectifiedPath))
-                        findNavController().popBackStack(R.id.projectCreationFragment, false)
-                    }
+                viewModel.confirmed.collect { b ->
+                    b ?: return@collect
+                    setFragmentResult(RESULT_KEY, bundleOf(QUAD_JSON to b.quadJson, RECTIFIED_PATH to b.rectifiedPath))
+                    findNavController().popBackStack(R.id.projectCreationFragment, false)
                 }
             }
         }
         viewModel.detect(args.imagePath)
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
     }
 
     companion object {

@@ -14,6 +14,7 @@ Ces pages expliquent la science derrière, étape par étape, et ce qui est vér
 | [06 — Décider et doser la confiance](06-decision-confiance.md) | classement, pistes alternatives, score de confiance, précision adaptative |
 | [07 — Validation](07-validation.md) | pièces synthétiques, photos réelles (Puzzle-Map), banque de 24 images, limites |
 | [08 — Et l'IA ?](08-ia.md) | reclassement par réseaux pré-entraînés : protocole, résultats, suite |
+| [09 — L'interface en Compose](09-compose.md) | les écrans, les composants communs, la feuille à 4 niveaux, ce qui reste en vues classiques |
 
 Code de référence : [`PieceMatcher.kt`](../app/src/main/java/com/lilyan_lefevre/puzzleit/feature/recognition/PieceMatcher.kt)
 (Kotlin pur, testable sur JVM) et [`PieceRecognizer.kt`](../app/src/main/java/com/lilyan_lefevre/puzzleit/feature/recognition/PieceRecognizer.kt)
