@@ -11,16 +11,16 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - Targets: > 70 % correct first lead, < 3 s per scan on the phone, no network. App size: > 50 MB is fine (owner, 2026-10-08),
   so an on-device model (ONNX Runtime) is allowed.
 - Edit / delete a puzzle: round buttons in the puzzle table's top bar (covered by e2e tests - keep them reachable). The box photo can be retaken at creation and in edit.
-- Sign-in is mandatory (no guest mode): the app starts on `LoginFragment` when nobody is signed in. Scanning itself stays 100 % on the phone. No "sync now" button, ever (owner).
-- Screens that draw their own header with a back button (list, table, scanner, account, history, progress, login) are listed in `MainActivity.ownHeader`: add a new one there, or the toolbar's arrow doubles theirs.
+- Sign-in is mandatory (no guest mode): the app starts on `LoginRoute` (`Dest.Login`) when nobody is signed in. Scanning itself stays 100 % on the phone. No "sync now" button, ever (owner).
+- Navigation = one Compose `NavHost` (`Navigation.kt`, typed `Dest` routes). There is no activity toolbar: every screen draws its own header (`ScreenHeader` or its own top bar).
 
 ## Code map (`app/src/main/java/com/lilyan_lefevre/puzzleit`) - package by feature, MVVM
 - `core/database` (Room, migrations in one file, Hilt module), `core/image` (shared image helpers), `core/ui` (reusable
   Compose pieces: `theme/PuzzleTheme`, `PuzzleComponents`, `PuzzleLoader`, `FileImage`, `screen {}`; and the hand-drawn `QuadSelectionView`). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
-- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, `ProjectListScreen`,
-  ProjectListViewModel), `create/` (ProjectCreation + PuzzleBounds fragments and ViewModels, BoxImageProcessor, GridProcessor).
-- `feature/puzzle/` the table: PuzzleWorkingFragment + ViewModel (`ScanState`, follows the project live, edit/delete),
-  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureFragment + `PieceCaptureScreen` (the viewfinder is drawn in Compose).
+- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (`ProjectListRoute`, `ProjectListScreen`,
+  ProjectListViewModel), `create/` (ProjectCreation + PuzzleBounds routes and ViewModels, BoxImageProcessor, GridProcessor).
+- `feature/puzzle/` the table: PuzzleWorkingRoute + ViewModel (`ScanState`, follows the project live, edit/delete),
+  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureRoute + `PieceCaptureScreen` (the viewfinder is drawn in Compose).
 - `feature/recognition/` `PieceReranker.kt` + `OnnxEmbedder.kt` (assets/reranker.onnx: embeddings of the piece and of the box squares), `PieceSegmenter.kt` + `OnnxSegmenter.kt`
   (assets/segmenter.onnx = U2-Net-small cuts the piece out; table-colour segmentation is the fallback), `PieceMatcher.kt` - the algorithm, pure Kotlin (JVM-testable): grid pre-cut,
   segmentation, **whole-box network search** (`buildIndex` = embeddings of every half-cell square, built in the background by `PieceRecognizer` and cached next to the reference
@@ -29,12 +29,12 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (tilt + flat/tab/blank sides -> corner/edge constraints, 4 rotations; with the network search the border constraint is a cost x1.4, a wall otherwise: the reading is often wrong on real pieces),
   5x5 Lab grid descriptor (mean, lightness ramp and contrast removed), confidence. `PieceRecognizer` = Bitmap glue,
   crops the square under the viewfinder, archives the last 200 captures + verdicts in `files/captures`.
-- `feature/history/` (`data/`: `ScanRecord` = a scanned piece with its leads as fractions of the box + the person's verdict, DAO, `ScanHistoryRepository`; `HistoryFragment`) and
-  `feature/progress/` (`data/`: `ProgressPhoto` + DAO + `ProgressRepository`; `ProgressFragment` takes the photo with the system camera). Both tables are deleted with their puzzle
+- `feature/history/` (`data/`: `ScanRecord` = a scanned piece with its leads as fractions of the box + the person's verdict, DAO, `ScanHistoryRepository`; `HistoryRoute`) and
+  `feature/progress/` (`data/`: `ProgressPhoto` + DAO + `ProgressRepository`; `ProgressRoute` takes the photo with the system camera). Both tables are deleted with their puzzle
   (FK cascade; the files live in `files/<projectId>/scans|progress`, removed with the puzzle's folder). DB version 7 (`ProjectMigration5` and `6`, covered by `ScanHistoryTest`; `updatedAt` = last edit of a puzzle, the sync keeps the newest).
   The result sheet asks "is that where the piece goes?" (`PuzzleWorkingViewModel.evaluate`): verdicts are the future real-world training / evaluation data.
 - `feature/account/` (`data/`: `PocketBaseClient` (password + PocketBase's OAuth2 flow over `/api/realtime`), `AccountStore` on encrypted prefs, `AccountModule` (OkHttp + prefs), `SyncRepository`, `isAcceptableServer`;
-  `LoginFragment` (email/password + one "Continue with ..." button per provider in the server's `auth-methods`), `AccountFragment` (who is signed in, sign out), one `AccountViewModel`). The server is `BuildConfig.PUZZLEIT_SERVER`
+  `LoginRoute` (email/password + one "Continue with ..." button per provider in the server's `auth-methods`), `AccountRoute` (who is signed in, sign out), one `AccountViewModel`). The server is `BuildConfig.PUZZLEIT_SERVER`
   (`-PpuzzleitServer=...` overrides it), not typed. `MainActivity` picks the start destination from `AccountStore` and navigates to/from login when the account appears/disappears (sign-out, 401).
   Repositories that delete things (`ProjectRepository`, `ScanHistoryRepository`, `ProgressRepository`) call `AccountStore.markDeleted` so the next sync tells the server (`deletions` collection, so the other phones delete too).
   Sync rules (`SyncRepository`): deletions replayed then applied, latest `updatedAt` wins for name/pieces/grid, newest `photoId` (date in the file name) wins for the box photo.
@@ -43,22 +43,22 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (not enough alone: the system camera stops the activity before the photo exists). Covered by `SyncIntegrationTest` (photos taken one after the other reach the server by themselves).
   `Project.photoId` / `deleteBoxFiles()` live in `feature/project/data/BoxFiles.kt` (the box index is cached next to the warped image under its name and goes with it).
   Tests run signed in on throw-away prefs: `TestAccountModule` (androidTest and test source sets) replaces `AccountModule` through Hilt; `ProjectSetupTest` is a Hilt Robolectric test for that reason (no Android Keystore on the JVM).
-- Fragments only render state, handle system intents and navigate; IO, image work and validation live in ViewModels
+- Routes (`XRoute`) only render state, handle system intents (permissions, camera) and call navigation lambdas; IO, image work and validation live in ViewModels
   or injected classes.
 - Docs: `documentation/` (French, numbered pages: the science 01-06, validation 07, AI experiment 08, Compose UI 09) and
   `documentation/screenshots` (README images). No other docs folder.
 
 ## Code conventions (follow the existing patterns)
-- **Placement**: a new screen = `feature/<feature>/<screen>/` with its Fragment + `@HiltViewModel` ViewModel. Shared by
+- **Placement**: a new screen = `feature/<feature>/<screen>/` with its `XRoute` + `XScreen` + `@HiltViewModel` ViewModel, and a `Dest` entry + `composable<Dest.X>` in `Navigation.kt`. Shared by
   several features -> `core/<topic>`. Pure algorithms stay free of Android types so they run on the JVM.
 - **ViewModel state**: `private val _x = MutableStateFlow(...)` + `val x: StateFlow<...> = _x.asStateFlow()`. Screens with
-  several states use a sealed interface (see `ScanState`). One-shot events are nullable StateFlows the fragment clears
+  several states use a sealed interface (see `ScanState`). One-shot events are nullable StateFlows the route clears
   after handling (`errorShown()`, `savedHandled()`). Live data from Room: `repository.flow().stateIn(viewModelScope, ...)`.
 - **Errors**: string resource ids (`@StringRes Int`), never hard-coded text; every string exists in `values` and
   `values-fr`.
-- **Screens (Compose, see `documentation/09-compose.md`)**: each screen is a stateless `@Composable XScreen(data..., onAction...)` next to its Fragment; the Fragment only navigates, asks permissions,
-  shows Toasts and returns `screen { ... }` from `onCreateView` (state read with `collectAsStateWithLifecycle()`). No ViewBinding, no `res/layout`. Navigation with nav graph actions;
-  transitions `MaterialSharedAxis` X between screens, Y for the camera. Every screen has a `@Preview` and `testTag`s named like the old view ids (tests and the demo recorder use them).
+- **Screens (Compose, see `documentation/09-compose.md`)**: each screen is a stateless `@Composable XScreen(data..., onAction...)` next to its `XRoute`; the route reads the ViewModel (`hiltViewModel()`), asks permissions,
+  shows Toasts (state read with `collectAsStateWithLifecycle()`). The route gets lambdas, never a `NavController`: the wiring is in `PuzzleNavHost`. No ViewBinding, no `res/layout`, no Fragment. Results between screens
+  go through the `savedStateHandle` of the entry below (`PIECE_PHOTO`, framing). Transitions: slide X + fade between screens, Y for the camera. Every screen has a `@Preview` and `testTag`s named like the old view ids (tests and the demo recorder use them).
   Screens use `core/ui` components (`PrimaryButton`, `RoundIconButton`...), never a raw Material button.
 - **Result sheet**: `LevelSheet` / `LevelSheetState` (own drag + nested-scroll code, not Material's sheet) with four levels - peek (the leads with their %), half (piece next to the box), full ("why these leads" cards with the blinking `LeadComparison`), hidden (the map is free, a "Leads" pill brings it back). The peek and half heights are measured in `ResultContent` (`onGloballyPositioned`) and become the anchors; the map's bottom inset follows the level. No rows x columns anywhere in the UI (unknown before the border is complete): the position is a zone + percentages.
 - **Threading**: IO / image work in injected `@Singleton` classes with `withContext(Dispatchers.IO|Default)`; Bitmaps
@@ -152,11 +152,11 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 
 ## Known limits / next steps
 ### State on 2026-10-13 (UI in Compose)
-- The whole UI is Jetpack Compose (PR #5, squash-merged): 9 Fragments kept as hosts (`screen { XScreen(...) }`), no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
+- The whole UI is Jetpack Compose (PR #5, squash-merged), and since the `refactor/navigation-compose` branch (below) one `NavHost`, no Fragment, no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
   Verified: JVM unit tests, the 12 `ScanFlowTest` journeys on an API 34 emulator (one at a time: the Intel Mac's emulator is slow, disable Google Play services on the AVD or it ANRs), CI on Pixel 6 + small phone, the owner built and tried it.
   **Not verified**: `DemoTourTest` (ported to the accessibility tree + `input` events, never run), a real phone, creating a puzzle with the real camera, the corner framing.
 - README images and video (`documentation/screenshots`) still show the old UI: regenerate them with `DemoTourTest` (needs the phone or the emulator and `-e demoPuzzle`).
-- **Next: Navigation Compose** (separate PR, after the owner validated and merged PR #5): replace `nav_graph.xml` + Fragments by a `NavHost` in `MainActivity` (needs `navigation-compose` and `hilt-navigation-compose`). To redo: Safe Args -> typed routes, `setFragmentResult` (framing, camera) -> `savedStateHandle`, `MaterialSharedAxis` transitions -> Compose transitions, the e2e photo injection (it uses the fragment-result channel), the camera's lifecycle binding, `MainActivity.ownHeader` and the login redirect.
+- **Navigation Compose** (branch `refactor/navigation-compose`, not merged yet): `Navigation.kt` (`Dest` typed routes + `PuzzleNavHost`), one `XRoute` per former Fragment, `MainActivity` = `setContent` only. See `documentation/09-compose.md`. Verified: compiles, JVM unit tests, `ScanFlowTest` on the Pixel 6 managed device: 13 of 16 journeys in the full run; of the 3 failures, 2 pass when run alone (emulator overloaded) and `resultSheetSlidesFromPeekToFullAndAwayAndBack` also fails on `main` locally (never seen green here). **Not verified**: CI, a real phone, `DemoTourTest`, screenshots of the new headers (create / framing).
 - Local build: the project lives in iCloud Documents; `app/build`, `build` and `.kotlin` are `*.nosync` folders with symlinks (ignored by git) so iCloud stops adding "* 2" copies. If a build still fails on one: `rm -rf app/build.nosync/*`.
 
 ### State on 2026-10-11 (before v0.2.0)
