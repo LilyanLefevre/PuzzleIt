@@ -72,20 +72,20 @@ Details, rejected tries and protocol: [`documentation/07-validation.md`](documen
 
 ## Architecture
 
-Single activity, **package by feature**, **MVVM** (one ViewModel per screen, fragments only render and navigate), Hilt,
+Single activity, **package by feature**, **MVVM** (one ViewModel per screen, each screen is a Compose route, one NavHost navigates), Hilt,
 Room, CameraX, OpenCV for the box framing, ONNX Runtime for the two models. The matching algorithm is plain Kotlin,
 tested on the JVM.
 
 ```mermaid
 flowchart TB
   subgraph project[feature/project]
-    L[list: Fragment + ViewModel]
+    L[list: route + ViewModel]
     C[create: form + corner selection]
     D[(data: Project, DAO, Repository,<br/>ImageStorageManager)]
     P[BoxImageProcessor<br/>OpenCV detection, rectification]
   end
   subgraph puzzle[feature/puzzle]
-    W[PuzzleWorkingFragment + ViewModel<br/>ScanState] --- M[PuzzleMapView<br/>result sheet]
+    W[PuzzleWorkingRoute + ViewModel<br/>ScanState] --- M[PuzzleMapView<br/>result sheet]
     K[capture: viewfinder]
   end
   subgraph recognition[feature/recognition]
@@ -101,7 +101,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
   actor U as Person
-  participant F as PuzzleWorkingFragment
+  participant F as PuzzleWorkingRoute
   participant VM as PuzzleWorkingViewModel
   participant R as PieceRecognizer
   participant M as PieceMatcher

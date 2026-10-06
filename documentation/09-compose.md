@@ -8,15 +8,16 @@ Toute l'interface est écrite en **Jetpack Compose** (le système d'interface d�
 1. **Un écran est une fonction.** `LoginScreen(providers, busy, error, …)` reçoit des données et des actions, et décrit
    ce qu'on voit. Quand une donnée change, Compose rappelle la fonction et met l'écran à jour : on ne modifie jamais une
    vue à la main (`textView.text = …`, `isVisible = …`).
-2. **Les Fragments restent**, uniquement pour la navigation, les permissions, la caméra et les messages (`Toast`).
-   Leur `onCreateView` est devenu `= screen { … }` (voir `core/ui/ComposeHost.kt`) : le Fragment lit le ViewModel
-   (`collectAsStateWithLifecycle()`) et le passe à l'écran.
+2. **Il n'y a plus de Fragment.** Chaque écran a une fonction « route » (`XRoute`, à côté de `XScreen`) qui fait ce que
+   faisait le Fragment : elle lit le ViewModel (`collectAsStateWithLifecycle()`), demande les permissions, affiche les
+   messages (`Toast`) et passe le tout à l'écran. Elle ne navigue pas elle-même : elle reçoit des lambdas
+   (`onBack`, `onOpen`…) que le `NavHost` (`Navigation.kt`) branche.
 3. **Les écrans ne connaissent pas les ViewModels.** Ils reçoivent de simples valeurs et des lambdas (`onBack`,
    `onSave`…). C'est ce qui les rend faciles à lire, à prévisualiser (`@Preview`) et à tester.
 
 ```
-ProjectListFragment ──(ViewModel, navigation)──▶ ProjectListScreen(projects, syncing, onOpen, …)
-   fait quoi : naviguer                              fait quoi : dessiner et appeler les lambdas
+ProjectListRoute ──(ViewModel, permissions, messages)──▶ ProjectListScreen(projects, syncing, onOpen, …)
+   fait quoi : brancher                                      fait quoi : dessiner et appeler les lambdas
 ```
 
 ## Les briques communes (`core/ui`)
@@ -24,7 +25,6 @@ ProjectListFragment ──(ViewModel, navigation)──▶ ProjectListScreen(pro
 | Fichier | Contenu |
 |---|---|
 | `theme/PuzzleTheme.kt` | `PuzzleTheme` : les couleurs de `res/values/colors.xml` (une seule source), la police Space Grotesk, les coins 12 / 20 / 28 dp. `PuzzleText.display(taille)` = les grands titres, `PuzzleText.eyebrow` = le petit libellé citron. `PuzzleColors` = les couleurs sans case dans Material (`warning`, `scrim`, `secondaryText`). |
-| `ComposeHost.kt` | `Fragment.screen { … }` : crée la `ComposeView`, applique le thème et le fond sombre. |
 | `PuzzleComponents.kt` | `RoundIconButton` (bouton rond 48 dp), `ScreenHeader` (flèche retour + titre), `PrimaryButton` (citron), `TonalButton` (discret), `PuzzleCard` (carte à contour), `EmptyMessage`, `ConfirmDialog` (« Supprimer ? »). Un écran n'utilise jamais un bouton Material brut : il appelle l'un de ceux-là. |
 | `PuzzleLoader.kt` | Les quatre carreaux qui se soulèvent (l'indicateur « je réfléchis »), dessinés dans un `Canvas`. |
 | `FileImage.kt` | Affiche une photo stockée dans un fichier (Glide décode, tourne selon l'EXIF et réduit). |
@@ -33,7 +33,7 @@ ProjectListFragment ──(ViewModel, navigation)──▶ ProjectListScreen(pro
 
 | Écran | Fichiers | À savoir |
 |---|---|---|
-| Connexion | `account/LoginScreen.kt`, `LoginFragment.kt` | Les champs (`email`, `password`) vivent dans l'écran avec `rememberSaveable` (ils survivent à une rotation). Un bouton par fournisseur renvoyé par le serveur. |
+| Connexion | `account/LoginScreen.kt`, `LoginRoute.kt` | Les champs (`email`, `password`) vivent dans l'écran avec `rememberSaveable` (ils survivent à une rotation). Un bouton par fournisseur renvoyé par le serveur. |
 | Compte | `account/AccountScreen.kt` | |
 | Liste | `project/list/ProjectListScreen.kt` | `LazyColumn` (l'équivalent du RecyclerView) ; chaque carte « tombe » à sa première apparition (`Animatable`). |
 | Création / modification | `project/create/ProjectCreationScreen.kt` | Le formulaire est local à l'écran ; il n'appelle le ViewModel qu'au clic sur « Créer ». La grille (lignes × colonnes) est suggérée quand le nombre de pièces ou la photo change. |
@@ -68,8 +68,23 @@ dégrader. Elles sont insérées dans Compose avec `AndroidView`, chacune derri�
 | `QuadSelectionView` | `PuzzleBoundsScreen` | poignées des 4 coins et glissement du cadre |
 | `PreviewView` (CameraX) | `PieceCaptureScreen` | l'aperçu caméra est une vue |
 
-`MainActivity` garde sa `Toolbar` (utilisée par la création et le cadrage) et le `NavHostFragment` : la navigation, le
-graphe `nav_graph.xml`, les arguments sûrs et les transitions `MaterialSharedAxis` ne changent pas.
+## La navigation (`Navigation.kt`)
+
+* **Un seul `NavHost`**, créé par `MainActivity` (`setContent`, thème et fond sombre). Plus de `nav_graph.xml`, de
+  `NavHostFragment`, de Safe Args ni de `Toolbar`.
+* **Routes typées** : `Dest` (une `sealed interface` `@Serializable`) liste les écrans et leurs arguments
+  (`Dest.PuzzleWorking(projectId)`, `Dest.ProjectCreation(projectId = null)`…). On navigue avec
+  `navController.navigate(Dest.History(id))` : une faute de frappe ne compile pas. Les ViewModels qui lisent
+  `SavedStateHandle["projectId"]` (historique, progression) n'ont pas changé : le nom du champ est la clé.
+* **Résultats entre écrans** : l'écran du dessus écrit dans le `savedStateHandle` de l'entrée en dessous
+  (`previousBackStackEntry`), puis revient. La caméra écrit `PIECE_PHOTO` (la table l'analyse puis l'efface) ; le cadrage
+  écrit les 4 coins et la photo redressée (la création les lit puis les efface). Remplace `setFragmentResult`.
+* **Connexion** : `PuzzleNavHost` suit `AccountStore.account` ; si le compte disparaît (déconnexion, 401) il revient sur
+  `Dest.Login`, s'il apparaît il passe à la liste.
+* **Transitions** : un léger glissement horizontal + fondu entre écrans (l'ancien `MaterialSharedAxis` X), la caméra
+  monte du bas (Y), la connexion fait un fondu.
+* **En-têtes** : tous les écrans dessinent leur `ScreenHeader`, y compris la création et le cadrage (ils utilisaient la
+  `Toolbar` de l'activité). Plus de liste `ownHeader` à tenir à jour.
 
 ## Notions Compose utilisées (petit lexique)
 
@@ -80,7 +95,7 @@ graphe `nav_graph.xml`, les arguments sûrs et les transitions `MaterialSharedAx
 | `remember { … }` | `ProjectCard`, `LevelSheet` | garde une valeur entre deux dessins |
 | `rememberSaveable` | formulaires | pareil, et survit à une rotation |
 | `mutableStateOf` | `overlayOn`, `confirmDelete` | une valeur dont le changement redessine l'écran |
-| `collectAsStateWithLifecycle()` | Fragments | transforme un `StateFlow` du ViewModel en état Compose |
+| `collectAsStateWithLifecycle()` | routes | transforme un `StateFlow` du ViewModel en état Compose |
 | `LaunchedEffect(clé) { … }` | `PuzzleMap`, `PuzzleWorkingScreen` | exécute du code (souvent animé) quand la clé change |
 | `Animatable`, `animate*AsState` | `TurningPiece`, `Confidence` | animations |
 | `Canvas` | `PuzzleLoader`, `LeadComparison`, cadre de visée | dessin libre |
@@ -97,8 +112,4 @@ graphe `nav_graph.xml`, les arguments sûrs et les transitions `MaterialSharedAx
 
 ## Suite prévue
 
-* **Navigation Compose** : remplacer `nav_graph.xml` et les 9 Fragments par un `NavHost` dans `MainActivity`
-  (une activité, zéro Fragment). Les écrans `XScreen` ne changent pas ; ce qui bouge, c'est la navigation, les
-  résultats entre écrans (cadrage, caméra), les transitions et les tests e2e.
 * Régénérer les images et la vidéo du README (elles montrent encore l'ancienne interface).
-
