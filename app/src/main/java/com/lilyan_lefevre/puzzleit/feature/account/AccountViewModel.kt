@@ -46,7 +46,7 @@ class AccountViewModel @Inject constructor(
     private val _providers = MutableStateFlow<List<OAuthProvider>>(emptyList())
     val providers: StateFlow<List<OAuthProvider>> = _providers.asStateFlow()
 
-    /** A provider's page for the fragment to open in the browser, cleared once it did. */
+    /** A provider's page for the route to open in the browser, cleared once it did. */
     private val _openUrl = MutableStateFlow<String?>(null)
     val openUrl: StateFlow<String?> = _openUrl.asStateFlow()
 

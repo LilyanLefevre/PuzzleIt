@@ -41,7 +41,7 @@ import com.lilyan_lefevre.puzzleit.feature.account.data.OAuthProvider
 
 /**
  * Email + password, and one "Continue with ..." button per provider the server offers.
- * Stateless apart from what is being typed: the fragment gives it the data and the actions.
+ * Stateless apart from what is being typed: the route gives it the data and the actions.
  */
 @Composable
 fun LoginScreen(

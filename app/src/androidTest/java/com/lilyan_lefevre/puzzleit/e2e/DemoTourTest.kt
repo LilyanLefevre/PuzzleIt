@@ -5,18 +5,17 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.os.ParcelFileDescriptor
-import androidx.core.os.bundleOf
-import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import com.lilyan_lefevre.puzzleit.Dest
 import com.lilyan_lefevre.puzzleit.MainActivity
+import com.lilyan_lefevre.puzzleit.PIECE_PHOTO
 import com.lilyan_lefevre.puzzleit.R
 import com.lilyan_lefevre.puzzleit.TestImages
 import com.lilyan_lefevre.puzzleit.feature.project.data.Project
 import com.lilyan_lefevre.puzzleit.feature.project.data.ProjectRepository
-import com.lilyan_lefevre.puzzleit.feature.puzzle.capture.PieceCaptureFragment
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.flow.first
@@ -87,9 +86,8 @@ class DemoTourTest {
     /** The photo goes through the channel the camera screen uses; sent again until the matcher is ready. */
     private fun send(scenario: ActivityScenario<MainActivity>, file: File) = waitFor(60_000) {
         if (idle()) {
-            scenario.onActivity { a: FragmentActivity ->
-                val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
-                host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to file.absolutePath))
+            scenario.onActivity { a ->
+                a.navController.getBackStackEntry<Dest.PuzzleWorking>().savedStateHandle[PIECE_PHOTO] = file.absolutePath
             }
             Thread.sleep(300)
         }

@@ -14,17 +14,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
-import androidx.core.os.bundleOf
-import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import com.lilyan_lefevre.puzzleit.Dest
 import com.lilyan_lefevre.puzzleit.MainActivity
+import com.lilyan_lefevre.puzzleit.PIECE_PHOTO
 import com.lilyan_lefevre.puzzleit.R
 import com.lilyan_lefevre.puzzleit.TestImages
 import com.lilyan_lefevre.puzzleit.feature.project.data.ProjectRepository
-import com.lilyan_lefevre.puzzleit.feature.puzzle.capture.PieceCaptureFragment
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import org.junit.After
@@ -39,7 +38,7 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * Whole journey on the phone: list -> puzzle table -> (injected) piece photo -> result sheet -> leads -> dismiss.
- * The photo is injected through the same fragment-result channel the camera screen uses, so everything
+ * The photo is injected through the same saved-state channel the camera screen uses, so everything
  * downstream of the shutter is the real code. The screens are Compose: nodes are found by their `testTag`
  * (the names the old view ids had). Run with animations off (see CI script / README).
  */
@@ -112,9 +111,8 @@ class ScanFlowTest {
     private fun inject(scenario: ActivityScenario<MainActivity>, photo: File) {
         waitFor(30_000) {
             if (idle()) {
-                scenario.onActivity { a: FragmentActivity ->
-                    val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
-                    host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to photo.absolutePath))
+                scenario.onActivity { a ->
+                    a.navController.getBackStackEntry<Dest.PuzzleWorking>().savedStateHandle[PIECE_PHOTO] = photo.absolutePath
                 }
                 Thread.sleep(300)
             }

@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** The scans of one puzzle (its id comes in the fragment's arguments), live from Room. */
+/** The scans of one puzzle (its id comes in the route's arguments), live from Room. */
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     savedState: SavedStateHandle,

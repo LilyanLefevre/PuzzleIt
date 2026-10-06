@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** The progress photos of one puzzle (its id comes in the fragment's arguments), live from Room. */
+/** The progress photos of one puzzle (its id comes in the route's arguments), live from Room. */
 @HiltViewModel
 class ProgressViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
