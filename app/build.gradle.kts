@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     id("dagger.hilt.android.plugin")
-    alias(libs.plugins.androidx.navigation.safeargs.kotlin)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -58,7 +58,6 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
-        viewBinding = true
         buildConfig = true
     }
 
@@ -111,7 +110,8 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     
-    // Jetpack Compose: every screen is a @Composable hosted by its Fragment (see documentation/09-compose.md)
+    // Jetpack Compose: every screen is a @Composable, one NavHost in MainActivity (see documentation/09-compose.md)
+    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
@@ -121,9 +121,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // Material Design 3 (views): still used for the fragment transitions and the dialogs
+    // Material Design 3 (views): the XML theme and the error dialog
     implementation(libs.material)
-    implementation(libs.androidx.constraintlayout)
     
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel)
@@ -131,7 +130,6 @@ dependencies {
     // Room Database
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.navigation.runtime.ktx)
     kapt(libs.androidx.room.compiler)
     
     // CameraX
@@ -140,13 +138,13 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     
-    // Navigation
-    implementation(libs.androidx.navigation.fragment)
-    implementation(libs.androidx.navigation.ui)
-    
+    // Navigation Compose: one NavHost, typed routes (@Serializable, hence the serialization plugin)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.core)
+
     // Hilt Dependency Injection
     implementation(libs.hilt.android)
-    implementation(libs.hilt.navigation.fragment)
+    implementation(libs.hilt.navigation.compose)
     kapt(libs.hilt.compiler)
     
     // Testing

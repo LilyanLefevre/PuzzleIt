@@ -2,108 +2,60 @@ package com.lilyan_lefevre.puzzleit
 
 import android.os.Bundle
 import android.util.Log
-import android.view.View
 import android.widget.Toast
+import androidx.activity.compose.setContent
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.navOptions
-import androidx.navigation.ui.AppBarConfiguration
-import androidx.navigation.ui.setupActionBarWithNavController
-import com.lilyan_lefevre.puzzleit.databinding.ActivityMainNavBinding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import com.lilyan_lefevre.puzzleit.core.ui.theme.PuzzleTheme
 import com.lilyan_lefevre.puzzleit.feature.account.data.AccountStore
 import com.lilyan_lefevre.puzzleit.feature.account.data.SyncRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 
-/**
- * Main Activity with Navigation Component and centralized Toolbar management
- */
+/** The only activity: it hosts the theme and the [PuzzleNavHost] where every screen lives. */
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     @Inject lateinit var accountStore: AccountStore
     @Inject lateinit var syncRepository: SyncRepository
 
-    private lateinit var binding: ActivityMainNavBinding
+    /** The e2e tests hand the piece photo to the table through it, the way the camera screen does. */
+    @VisibleForTesting
+    lateinit var navController: NavHostController
 
+    @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMainNavBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        // Apply padding to AppBarLayout instead of Toolbar to fix alignment issues
-        ViewCompat.setOnApplyWindowInsetsListener(binding.appBarLayout) { v, insets ->
-            val topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            v.updatePadding(top = topInset)
-            insets
-        }
-
         syncRepository.startAutoSync()
-        setSupportActionBar(binding.toolbar)
-        setupNavigation()
-        
-        // Initialize OpenCV
-        initializeOpenCV()
-    }
-
-    private fun setupNavigation() {
-        val navHostFragment = supportFragmentManager
-            .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
-        val navController = navHostFragment.navController
-
-        // Nobody signed in: the app opens on the login screen, never on the list.
-        val signedIn = accountStore.account.value != null
-        navController.graph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
-            setStartDestination(if (signedIn) R.id.projectListFragment else R.id.loginFragment)
-        }
-
-        // Connect the action bar with the NavController
-        val appBarConfiguration = AppBarConfiguration(navController.graph)
-        setupActionBarWithNavController(navController, appBarConfiguration)
-
-        // These screens draw their own header (with its own back button): showing the toolbar too gave two arrows.
-        val ownHeader = setOf(
-            R.id.loginFragment, R.id.projectListFragment, R.id.puzzleWorkingFragment, R.id.pieceCaptureFragment,
-            R.id.accountFragment, R.id.historyFragment, R.id.progressFragment,
-        )
-        navController.addOnDestinationChangedListener { _, dest, _ ->
-            binding.toolbar.visibility = if (dest.id in ownHeader) View.GONE else View.VISIBLE
-        }
-
-        // Signing in leaves the login screen; signing out (or the server refusing the token) brings it back, whatever screen is open.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                accountStore.account.collect { account ->
-                    val onLogin = navController.currentDestination?.id == R.id.loginFragment
-                    if (account == null && !onLogin) {
-                        navController.navigate(R.id.loginFragment, null, navOptions { popUpTo(navController.graph.id) { inclusive = true } })
-                    } else if (account != null && onLogin) {
-                        navController.navigate(R.id.projectListFragment, null, navOptions { popUpTo(R.id.loginFragment) { inclusive = true } })
-                    }
+        setContent {
+            PuzzleTheme {
+                // testTagsAsResourceId: the tests tag nodes with names (like the old view ids), and the screen recorder / UiAutomator read them as ids.
+                Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }, color = MaterialTheme.colorScheme.background) {
+                    navController = rememberNavController()
+                    PuzzleNavHost(navController, accountStore)
                 }
             }
         }
+
+        // Initialize OpenCV
+        initializeOpenCV()
     }
 
     // Leaving the app is the moment to push what changed: there is no sync button.
     override fun onStop() {
         super.onStop()
         syncRepository.syncInBackground()
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        val navHostFragment = supportFragmentManager
-            .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
-        return navHostFragment.navController.navigateUp() || super.onSupportNavigateUp()
     }
 
     /**

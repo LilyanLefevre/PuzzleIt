@@ -63,7 +63,7 @@ import kotlin.math.min
 /**
  * The camera: live preview, the viewfinder that says where to put the piece, close and light buttons, the shutter.
  *
- * The preview itself is CameraX's [PreviewView] (a View, wrapped with [AndroidView]); the fragment gets it through
+ * The preview itself is CameraX's [PreviewView] (a View, wrapped with [AndroidView]); the route gets it through
  * [onPreviewReady] and binds the camera to it. [flash] is the white veil that blinks when the photo is taken.
  */
 @Composable

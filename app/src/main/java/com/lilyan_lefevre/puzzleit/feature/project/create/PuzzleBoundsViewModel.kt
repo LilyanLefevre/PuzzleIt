@@ -4,6 +4,7 @@ import android.graphics.PointF
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lilyan_lefevre.puzzleit.core.image.ImageUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class PuzzleBoundsViewModel @Inject constructor(
     private val processor: BoxImageProcessor,
+    private val imageUtils: ImageUtils,
 ) : ViewModel() {
 
     data class Bounds(val quadJson: String, val rectifiedPath: String)
@@ -26,6 +28,9 @@ class PuzzleBoundsViewModel @Inject constructor(
     val confirmed: StateFlow<Bounds?> = _confirmed.asStateFlow()
 
     private var detectionStarted = false
+
+    /** Photo size after EXIF rotation, needed by the view to place the corners. */
+    fun sourceSize(imagePath: String): Pair<Int, Int> = imageUtils.readOrientedDimensions(imagePath)
 
     fun detect(imagePath: String) {
         if (detectionStarted) return
