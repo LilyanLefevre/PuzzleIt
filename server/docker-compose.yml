@@ -3,9 +3,14 @@ services:
     image: ghcr.io/lilyanlefevre/puzzleit-server:latest
     build: .
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
     ports:
-      # 0.0.0.0 = reachable on the home network. Put PUZZLEIT_BIND=127.0.0.1 in .env when only the Cloudflare tunnel should reach it.
-      - "${PUZZLEIT_BIND:-0.0.0.0}:8090:8090"
+      # Local only by default: the Cloudflare tunnel reaches the server through the compose network, and you reach the dashboard with
+      # `ssh -L 8090:127.0.0.1:8090 <host>`. PUZZLEIT_BIND=0.0.0.0 in .env opens it to the home network (a test phone on Wi-Fi).
+      - "${PUZZLEIT_BIND:-127.0.0.1}:8090:8090"
     volumes:
       # Everything the server stores (accounts, records, photos) lives here: back this folder up.
       - ./pb_data:/pb/pb_data
@@ -17,6 +22,9 @@ services:
     profiles: ["tunnel"]
     restart: unless-stopped
     command: tunnel --no-autoupdate run
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN:?set CLOUDFLARED_TOKEN in server/.env}
     depends_on:
