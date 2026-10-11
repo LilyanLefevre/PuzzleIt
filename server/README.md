@@ -98,7 +98,11 @@ Google provider (client ID `dummy`): it checks the list of providers, the realti
 - The app only sends a password over `https://` (plain `http://` is accepted for a home-network address only). The production server gets its HTTPS from the Cloudflare Tunnel above;
   without a tunnel, put a reverse proxy such as [Caddy](https://caddyserver.com) in front (`puzzleit.example.com { reverse_proxy localhost:8090 }`).
 - Anyone who can reach the server can create an account, by password and through a provider alike. On the internet, lock the sign-up in the dashboard (Collections, users, API rules,
-  create rule: locked) once your accounts exist.
+  create rule: locked) once your accounts exist. If the app stays open to the public, rely on Google sign-in (the provider filters the bots), keep the password sign-up locked and
+  switch on PocketBase's rate limiting (Settings, Application, Rate limiting).
+- Each account is capped at 50 puzzles by [`pb_hooks/quota.pb.js`](pb_hooks/quota.pb.js), and [`3_harden_rules.js`](pb_migrations/3_harden_rules.js) forbids changing a record's `owner`
+  and attaching a scan or photo to someone else's puzzle.
+- The image downloads PocketBase with a pinned SHA-256 (`Dockerfile`): update it together with `PB_VERSION`.
 
 ## Develop against it
 
