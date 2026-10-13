@@ -214,7 +214,7 @@ private fun Compare(cutout: Bitmap, lead: Candidate, box: Bitmap, grid: Grid, mo
             Box(Modifier.size(104.dp).tile(), contentAlignment = Alignment.Center) { TurningPiece(cutout, lead.rotationDeg) }
             Text(stringResource(R.string.your_piece), Modifier.padding(top = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("≈", Modifier.padding(start = 10.dp, end = 10.dp, bottom = 18.dp), fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("≈", Modifier.padding(start = 6.dp, end = 6.dp, bottom = 18.dp), fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 patch.asImageBitmap(), stringResource(R.string.on_the_box),
@@ -223,11 +223,11 @@ private fun Compare(cutout: Bitmap, lead: Candidate, box: Bitmap, grid: Grid, mo
             )
             Text(stringResource(R.string.on_the_box), Modifier.padding(top = 6.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Column(Modifier.weight(1f).padding(start = 14.dp, bottom = 18.dp)) {
+        Column(Modifier.weight(1f).padding(start = 8.dp, bottom = 18.dp)) {
             Icon(painterResource(R.drawable.ic_rotate_small), contentDescription = null, tint = Color.Unspecified)
             Text(
                 rotationText(lead.rotationDeg), Modifier.padding(top = 6.dp).testTag("textRotate"),
-                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PuzzleColors.secondaryText,
+                fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PuzzleColors.secondaryText,
             )
         }
     }
