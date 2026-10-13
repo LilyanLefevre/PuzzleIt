@@ -52,37 +52,4 @@
         <item name="android:minHeight">52dp</item>
     </style>
 
-    <style name="Text.Display" parent="TextAppearance.Material3.HeadlineLarge">
-        <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/puzzle_on_surface</item>
-        <item name="android:letterSpacing">-0.02</item>
-    </style>
-    <style name="Text.Eyebrow" parent="TextAppearance.Material3.LabelMedium">
-        <item name="android:textColor">@color/puzzle_primary</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.14</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="Widget.Puzzle.IconButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
-        <item name="backgroundTint">@color/puzzle_scrim</item>
-        <item name="iconTint">@color/puzzle_on_surface</item>
-    </style>
-
-    <style name="Widget.Puzzle.Chip" parent="Widget.Material3.Chip.Assist">
-        <item name="chipBackgroundColor">@color/puzzle_surface_high</item>
-        <item name="chipStrokeColor">@color/puzzle_outline</item>
-        <item name="android:textColor">@color/puzzle_on_surface</item>
-    </style>
-
-    <style name="Widget.Puzzle.FilterChip" parent="Widget.Material3.Chip.Filter">
-        <item name="chipBackgroundColor">@color/chip_bg</item>
-        <item name="android:textColor">@color/chip_text</item>
-        <item name="chipStrokeColor">@color/puzzle_outline</item>
-        <item name="chipStrokeWidth">1dp</item>
-        <item name="checkedIconVisible">false</item>
-        <item name="chipMinHeight">40dp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
 </resources>
