@@ -11,21 +11,22 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
-import com.bumptech.glide.Glide
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.lilyan_lefevre.puzzleit.R
 import com.lilyan_lefevre.puzzleit.core.image.PhotoHelper
-import com.lilyan_lefevre.puzzleit.databinding.FragmentProjectCreationBinding
+import com.lilyan_lefevre.puzzleit.core.ui.screen
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import kotlinx.coroutines.launch
@@ -33,9 +34,6 @@ import kotlinx.coroutines.launch
 /** Create or edit a project: box photo (system camera), framing, name, piece count and grid. */
 @AndroidEntryPoint
 class ProjectCreationFragment : Fragment() {
-
-    private var _binding: FragmentProjectCreationBinding? = null
-    private val binding get() = _binding!!
 
     private val viewModel: ProjectCreationViewModel by viewModels()
     private val args: ProjectCreationFragmentArgs by navArgs()
@@ -55,51 +53,42 @@ class ProjectCreationFragment : Fragment() {
         }
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        _binding = FragmentProjectCreationBinding.inflate(inflater, container, false)
-        return binding.root
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View = screen {
+        val draft by viewModel.draft.collectAsStateWithLifecycle()
+        val existing by viewModel.existing.collectAsStateWithLifecycle()
+        val processing by viewModel.isProcessing.collectAsStateWithLifecycle()
+
+        // The toolbar of the activity shows the title: "New puzzle" or "Edit puzzle".
+        LaunchedEffect(existing) { (activity as? AppCompatActivity)?.supportActionBar?.setTitle(viewModel.titleRes()) }
+
+        ProjectCreationScreen(
+            preview = draft.preview,
+            existing = existing,
+            processing = processing,
+            suggestGrid = viewModel::suggestGrid,
+            onTakePhoto = ::checkPermissionAndTakePhoto,
+            onFramePhoto = { draft.originalPath?.let(::openBounds) },
+            onCancel = { viewModel.discardDraft(); findNavController().navigateUp() },
+            onSave = viewModel::save,
+        )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         args.projectId?.let(viewModel::loadForEdit)
 
-        binding.photoPlaceholder.setOnClickListener { checkPermissionAndTakePhoto() }
-        binding.retakePhotoButton.setOnClickListener { checkPermissionAndTakePhoto() }
-        binding.editPhotoButton.setOnClickListener { viewModel.draft.value.originalPath?.let(::openBounds) }
-        binding.btnCancel.setOnClickListener { viewModel.discardDraft(); findNavController().navigateUp() }
-        binding.btnCreate.setOnClickListener {
-            viewModel.save(binding.editTextName.text.toString(), number(binding.editTextPieces), number(binding.editTextRows), number(binding.editTextCols))
-        }
-        binding.editTextPieces.doAfterTextChanged { suggestGrid() }
-
         setFragmentResultListener(PuzzleBoundsFragment.RESULT_KEY) { _, b ->
             val quad = b.getString(PuzzleBoundsFragment.QUAD_JSON) ?: return@setFragmentResultListener
             val path = b.getString(PuzzleBoundsFragment.RECTIFIED_PATH) ?: return@setFragmentResultListener
             viewModel.onBoundsConfirmed(quad, path)
-            suggestGrid()
         }
-        observe()
+        observeEvents()
     }
 
-    private fun observe() {
+    /** One-shot events: an error to tell, or the save that ends this screen. Everything else is drawn by the screen. */
+    private fun observeEvents() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { viewModel.draft.collect { renderPhoto(it.preview) } }
-                launch {
-                    viewModel.existing.collect { p ->
-                        (activity as? AppCompatActivity)?.supportActionBar?.setTitle(viewModel.titleRes())
-                        p ?: return@collect
-                        if (binding.editTextName.text.isNullOrEmpty()) {
-                            binding.editTextName.setText(p.name)
-                            binding.editTextPieces.setText(p.puzzleSize.toString())
-                            binding.editTextRows.setText(p.gridRows.toString())
-                            binding.editTextCols.setText(p.gridCols.toString())
-                        }
-                        binding.btnCreate.setText(R.string.save_changes)
-                    }
-                }
-                launch { viewModel.isProcessing.collect { binding.progressBar.visibility = if (it) View.VISIBLE else View.GONE } }
                 launch {
                     viewModel.error.collect { e ->
                         e ?: return@collect
@@ -127,14 +116,6 @@ class ProjectCreationFragment : Fragment() {
         }
     }
 
-    private fun suggestGrid() {
-        val pieces = number(binding.editTextPieces) ?: return
-        viewModel.suggestGrid(pieces)?.let {
-            binding.editTextRows.setText(it.rows.toString())
-            binding.editTextCols.setText(it.cols.toString())
-        }
-    }
-
     private fun checkPermissionAndTakePhoto() {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePhoto()
         else requestPermission.launch(Manifest.permission.CAMERA)
@@ -152,24 +133,6 @@ class ProjectCreationFragment : Fragment() {
 
     private fun openBounds(imagePath: String) {
         findNavController().navigate(ProjectCreationFragmentDirections.actionProjectCreationFragmentToPuzzleBoundsFragment(imagePath))
-    }
-
-    private fun renderPhoto(path: String?) {
-        val has = !path.isNullOrBlank()
-        binding.photoPlaceholder.visibility = if (has) View.GONE else View.VISIBLE
-        binding.photoPreviewCard.visibility = if (has) View.VISIBLE else View.GONE
-        binding.editPhotoButton.visibility = if (has) View.VISIBLE else View.GONE
-        binding.retakePhotoButton.visibility = if (has) View.VISIBLE else View.GONE
-        if (has) Glide.with(this).load(File(path!!)).placeholder(android.R.drawable.ic_menu_camera)
-            .error(android.R.drawable.ic_menu_camera).fitCenter().into(binding.photoPreview)
-        else Glide.with(this).clear(binding.photoPreview)
-    }
-
-    private fun number(field: android.widget.EditText): Int? = field.text.toString().toIntOrNull()
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
     }
 
     private companion object { const val TAG = "ProjectCreation" }

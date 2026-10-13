@@ -8,29 +8,21 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.transition.MaterialSharedAxis
 import com.lilyan_lefevre.puzzleit.R
-import com.lilyan_lefevre.puzzleit.databinding.FragmentProgressBinding
+import com.lilyan_lefevre.puzzleit.core.ui.screen
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 /** Photos of the puzzle as it stands, one per date: a way to see it grow, and later to place pieces on what is already done. */
 @AndroidEntryPoint
 class ProgressFragment : Fragment() {
-
-    private var _binding: FragmentProgressBinding? = null
-    private val binding get() = _binding!!
 
     private val viewModel: ProgressViewModel by viewModels()
 
@@ -54,43 +46,16 @@ class ProgressFragment : Fragment() {
         reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        _binding = FragmentProgressBinding.inflate(inflater, container, false)
-        return binding.root
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        binding.buttonBack.setOnClickListener { findNavController().navigateUp() }
-        binding.buttonAddPhoto.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePhoto()
-            else requestPermission.launch(Manifest.permission.CAMERA)
-        }
-        val adapter = ProgressPhotoAdapter { photo ->
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.delete_photo_title)
-                .setMessage(R.string.delete_photo_message)
-                .setPositiveButton(R.string.delete) { _, _ -> viewModel.delete(photo) }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-        }
-        binding.recyclerPhotos.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerPhotos.adapter = adapter
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    viewModel.photos.collect { photos ->
-                        adapter.submitList(photos)
-                        binding.textEmpty.isVisible = photos.isEmpty()
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View = screen {
+        val photos by viewModel.photos.collectAsStateWithLifecycle()
+        ProgressScreen(
+            photos = photos,
+            onBack = { findNavController().navigateUp() },
+            onAddPhoto = {
+                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePhoto()
+                else requestPermission.launch(Manifest.permission.CAMERA)
+            },
+            onDelete = viewModel::delete,
+        )
     }
 }

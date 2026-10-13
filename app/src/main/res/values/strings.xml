@@ -10,6 +10,9 @@
     <string name="project_created_successfully">Project "%s" created successfully!</string>
     <string name="puzzle_name">Puzzle name</string>
     <string name="number_of_pieces">Number of pieces</string>
+    <string name="clear_field">Clear</string>
+    <string name="rows_hint">Rows</string>
+    <string name="cols_hint">Columns</string>
     <string name="create_project">Create Project</string>
     <string name="cancel">Cancel</string>
     <string name="please_enter_project_name">Please enter a project name</string>
@@ -150,6 +153,8 @@ Start from a photo of the box.</string>
     <string name="continue_with">Continue with %1$s</string>
     <string name="email_hint">Email</string>
     <string name="password_hint">Password (8 characters or more)</string>
+    <string name="show_password">Show</string>
+    <string name="hide_password">Hide</string>
     <string name="sign_in">Sign in</string>
     <string name="create_account">Create the account</string>
     <string name="sign_out">Sign out</string>
