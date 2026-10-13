@@ -128,7 +128,6 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - Tag `v<versionName>` (`app/build.gradle.kts`) -> `.github/workflows/release.yml` builds the signed APK and creates the GitHub release.
   Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.); without them `assembleRelease` gives an unsigned APK.
   The keystore lives outside the repo (never commit it; lose the key and no update can be installed over an existing install: tell the owner to back it up). Where it is: `CLAUDE.local.md`.
-  repo, never commit them; lose the key and no update can be installed over an existing install: tell the owner to back it up).
 - `assembleRelease` needs the network (lint-gradle is not in the offline cache). The APK is ~220 MB (ONNX Runtime + OpenCV for 4 ABIs).
 
 ## Benchmarks (opt-in JVM tests, not in CI; data rebuilt by scripts)
