@@ -3,17 +3,11 @@ package com.lilyan_lefevre.puzzleit.e2e
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.os.ParcelFileDescriptor
-import android.view.View
-import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.fragment.app.FragmentActivity
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -40,6 +34,9 @@ import kotlin.math.sqrt
  * Plays the tour that the README video shows, with slow real swipes, on the puzzle already on the device whose name is given as
  * `-e demoPuzzle "<name>"` (read only; the phone also holds private puzzles, so it is never picked by itself).
  * The screen records itself into /sdcard/demo.mp4: `adb pull /sdcard/demo.mp4`. Skipped without that argument or when no puzzle has that name.
+ *
+ * No Compose test rule here: it would freeze the infinite animations (the blinking piece, the loaders) that the video must show. The nodes are
+ * found through the accessibility tree instead, by their test tag (the screens expose tags as resource ids), and touched with real `input` events.
  */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -71,23 +68,36 @@ class DemoTourTest {
         shell("input swipe ${x.toInt()} ${fromY.toInt()} ${x.toInt()} ${toY.toInt()} $ms")
     }
 
-    /** The first view under [root] that satisfies [match], depth first. */
-    private fun find(root: View, match: (View) -> Boolean): View? {
-        if (root.visibility == View.VISIBLE && match(root)) return root
-        if (root is ViewGroup) for (i in 0 until root.childCount) find(root.getChildAt(i), match)?.let { return it }
-        return null
+    /** Where the node tagged [tag] is on the screen, or null when it is not shown. */
+    private fun bounds(tag: String): Rect? =
+        instrumentation.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByViewId(tag)?.firstOrNull()
+            ?.let { node -> Rect().also(node::getBoundsInScreen) }
+
+    private fun shown(tag: String): Rect = checkNotNull(bounds(tag)) { "$tag is not on the screen" }
+
+    /** A real tap at the centre of the node (or on its lower edge, [low], to land beside what is drawn in its middle): Espresso refuses to run with animations on, and the video needs them. */
+    private fun tap(tag: String, low: Boolean = false) {
+        val r = shown(tag)
+        shell("input tap ${r.centerX()} ${if (low) r.bottom - (24 * ctx.resources.displayMetrics.density).toInt() else r.centerY()}")
     }
 
-    /** A real tap at the centre of the view: Espresso's click refuses to run with animations on, and the video needs them. */
-    private fun tap(scenario: ActivityScenario<MainActivity>, what: String, match: (View) -> Boolean) {
-        var x = 0; var y = 0
-        scenario.onActivity { act ->
-            val v = checkNotNull(find(act.window.decorView, match)) { "view to tap not found: $what" }
-            val loc = IntArray(2); v.getLocationOnScreen(loc)
-            x = loc[0] + v.width / 2; y = loc[1] + v.height / 2
+    /** True while the table waits for a piece photo. */
+    private fun idle() = bounds("buttonCapturePiece") != null
+
+    /** The photo goes through the channel the camera screen uses; sent again until the matcher is ready. */
+    private fun send(scenario: ActivityScenario<MainActivity>, file: File) = waitFor(60_000) {
+        if (idle()) {
+            scenario.onActivity { a: FragmentActivity ->
+                val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
+                host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to file.absolutePath))
+            }
+            Thread.sleep(300)
         }
-        shell("input tap $x $y")
+        check(!idle()) { "the table did not start analysing" }
     }
+
+    /** A little under the top edge of the result sheet, on the grabber. */
+    private fun sheetTop(): Float = shown("sheet").top + 24 * ctx.resources.displayMetrics.density
 
     /** The puzzle to film, its box image and the grid a piece photo is cut on. */
     private class Demo(val project: Project, val art: Bitmap, val cols: Int, val rows: Int)
@@ -128,47 +138,30 @@ class DemoTourTest {
         val photo = pieceOf(demo, "demo_piece.jpg")
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor { onView(withText(project.name)).check(matches(isDisplayed())) }
+            waitFor { shown("project_${project.id}") }
             // The list is not filmed: it shows every puzzle of the phone. The recording starts once inside the chosen puzzle.
-            tap(scenario, "project") { it is android.widget.TextView && it.text.toString() == project.name }
-            waitFor { onView(withId(R.id.buttonCapturePiece)).check(matches(isDisplayed())) }
+            tap("project_${project.id}")
+            waitFor { shown("buttonCapturePiece") }
             val recorder = instrumentation.uiAutomation.executeShellCommand("screenrecord --size 720x1544 --bit-rate 14000000 /sdcard/demo.mp4")
             Thread.sleep(2500)
 
-            // The photo goes through the channel the camera screen uses; sent again until the matcher is ready.
-            fun idle(): Boolean { var v = true; scenario.onActivity { v = it.findViewById<View>(R.id.groupIdle).visibility == View.VISIBLE }; return v }
-            waitFor(60_000) {
-                if (idle()) {
-                    scenario.onActivity { a: FragmentActivity ->
-                        val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
-                        host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to photo.absolutePath))
-                    }
-                    Thread.sleep(300)
-                }
-                check(!idle()) { "the table did not start analysing" }
-            }
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            send(scenario, photo)
+            waitFor { shown("groupResult") }
             Thread.sleep(3500)
 
             var width = 0f; var height = 0f
             scenario.onActivity { width = it.window.decorView.width.toFloat(); height = it.window.decorView.height.toFloat() }
-            fun sheetTop(): Float {
-                var y = 0f
-                scenario.onActivity { val loc = IntArray(2); it.findViewById<View>(R.id.sheet).getLocationOnScreen(loc); y = loc[1] + 24 * it.resources.displayMetrics.density }
-                return y
-            }
-            fun lead(n: Int) = tap(scenario, "lead $n") { it is android.widget.TextView && it.text.contains(ctx.getString(R.string.alt_lead, n)) && (it.parent as? View)?.id == R.id.chipLeads }
 
-            lead(2); Thread.sleep(2500)
-            lead(1); Thread.sleep(2000)
+            tap("chipLead2"); Thread.sleep(2500)
+            tap("chipLead1"); Thread.sleep(2000)
             swipe(width / 2, sheetTop(), 0.04f * height, 900); Thread.sleep(2000)    // full level: why these leads
             repeat(3) { swipe(width / 2, 0.8f * height, 0.35f * height, 900); Thread.sleep(1500) }
             repeat(3) { swipe(width / 2, 0.35f * height, 0.8f * height, 700); Thread.sleep(600) }
             Thread.sleep(800)
-            scenario.onActivity { act -> act.findViewById<ViewGroup>(R.id.explainList).getChildAt(1).performClick() }   // a card leads to the map
+            tap("explainCard1", low = true)   // a card leads to the map
             Thread.sleep(3000)
             swipe(width / 2, sheetTop(), 0.995f * height, 200); Thread.sleep(2500)    // a flick hides the sheet: the map is free
-            tap(scenario, "pill") { it.id == R.id.pillLeads }; Thread.sleep(3000)
+            tap("pillLeads"); Thread.sleep(3000)
 
             shell("kill -2 ${shell("pidof screenrecord").trim()}")   // SIGINT: the recorder finishes the file
             Thread.sleep(2000)
@@ -184,35 +177,18 @@ class DemoTourTest {
         val photo = pieceOf(demo, "demo_piece.jpg")
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor { onView(withText(project.name)).check(matches(isDisplayed())) }
-            tap(scenario, "project") { it is android.widget.TextView && it.text.toString() == project.name }
-            waitFor { onView(withId(R.id.buttonCapturePiece)).check(matches(isDisplayed())) }
+            waitFor { shown("project_${project.id}") }
+            tap("project_${project.id}")
+            waitFor { shown("buttonCapturePiece") }
             Thread.sleep(2500)
             shot(scenario, "table")
 
-            fun idle(): Boolean { var v = true; scenario.onActivity { v = it.findViewById<View>(R.id.groupIdle).visibility == View.VISIBLE }; return v }
-            fun send(file: File) = waitFor(60_000) {
-                if (idle()) {
-                    scenario.onActivity { a: FragmentActivity ->
-                        val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
-                        host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to file.absolutePath))
-                    }
-                    Thread.sleep(300)
-                }
-                check(!idle()) { "the table did not start analysing" }
-            }
-
-            send(photo)
-            waitFor { onView(withId(R.id.groupResult)).check(matches(isDisplayed())) }
+            send(scenario, photo)
+            waitFor { shown("groupResult") }
             Thread.sleep(3500); shot(scenario, "result")
 
             var width = 0f; var height = 0f
             scenario.onActivity { width = it.window.decorView.width.toFloat(); height = it.window.decorView.height.toFloat() }
-            fun sheetTop(): Float {
-                var y = 0f
-                scenario.onActivity { val loc = IntArray(2); it.findViewById<View>(R.id.sheet).getLocationOnScreen(loc); y = loc[1] + 24 * it.resources.displayMetrics.density }
-                return y
-            }
             swipe(width / 2, sheetTop(), 0.04f * height, 900); Thread.sleep(2500); shot(scenario, "why")
             swipe(width / 2, sheetTop(), 0.995f * height, 200); Thread.sleep(2500); shot(scenario, "map")
         }
@@ -243,7 +219,7 @@ class DemoTourTest {
                 }
             }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                waitFor { onView(withText(demos.last().second)).check(matches(isDisplayed())) }
+                waitFor { shown("project_${ids.last()}") }
                 Thread.sleep(2000); shot(scenario, "list")
             }
         } finally {
@@ -260,21 +236,11 @@ class DemoTourTest {
         val blurry = TestImages.save(TestImages.blurred(TestImages.piecePhoto(demo.art, demo.cols, demo.rows, 5, 5, 0f)), ctx.cacheDir, "demo_blur.jpg")
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor { onView(withText(project.name)).check(matches(isDisplayed())) }
-            tap(scenario, "project") { it is android.widget.TextView && it.text.toString() == project.name }
-            waitFor { onView(withId(R.id.buttonCapturePiece)).check(matches(isDisplayed())) }
-            fun idle(): Boolean { var v = true; scenario.onActivity { v = it.findViewById<View>(R.id.groupIdle).visibility == View.VISIBLE }; return v }
-            waitFor(60_000) {
-                if (idle()) {
-                    scenario.onActivity { a: FragmentActivity ->
-                        val host = a.supportFragmentManager.findFragmentById(R.id.nav_host_fragment)!!
-                        host.childFragmentManager.setFragmentResult(PieceCaptureFragment.RESULT_KEY, bundleOf(PieceCaptureFragment.PHOTO_PATH to blurry.absolutePath))
-                    }
-                    Thread.sleep(300)
-                }
-                check(!idle()) { "the table did not start analysing" }
-            }
-            waitFor { onView(withId(R.id.groupError)).check(matches(isDisplayed())) }
+            waitFor { shown("project_${project.id}") }
+            tap("project_${project.id}")
+            waitFor { shown("buttonCapturePiece") }
+            send(scenario, blurry)
+            waitFor { shown("groupError") }
             Thread.sleep(1200); shot(scenario, "blurry")
         }
     }
