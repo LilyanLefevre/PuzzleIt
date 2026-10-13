@@ -15,31 +15,43 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResult
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialSharedAxis
-import com.lilyan_lefevre.puzzleit.databinding.FragmentPieceCaptureBinding
+import com.lilyan_lefevre.puzzleit.R
+import com.lilyan_lefevre.puzzleit.core.ui.screen
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-/** Takes the photo of one loose piece and hands the file back to the working screen. */
+/** Takes the photo of one loose piece and hands the file back to the working screen. The camera is CameraX, the rest is [PieceCaptureScreen]. */
 class PieceCaptureFragment : Fragment() {
 
-    private var _binding: FragmentPieceCaptureBinding? = null
-    private val binding get() = _binding!!
-
+    private var previewView: PreviewView? = null
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
-    private var torch = false
     private lateinit var executor: ExecutorService
+
+    // Read by the screen: Compose redraws it when they change, even when they are set from the camera's thread.
+    private var torch by mutableStateOf(false)
+    private var shutterEnabled by mutableStateOf(true)
+    /** The photo just taken: the flash plays, then it is handed back. */
+    private var taken by mutableStateOf<File?>(null)
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else {
-            Toast.makeText(requireContext(), com.lilyan_lefevre.puzzleit.R.string.camera_permission_denied, Toast.LENGTH_LONG).show()
+            Toast.makeText(requireContext(), R.string.camera_permission_denied, Toast.LENGTH_LONG).show()
             findNavController().navigateUp()
         }
     }
@@ -50,30 +62,34 @@ class PieceCaptureFragment : Fragment() {
         returnTransition = MaterialSharedAxis(MaterialSharedAxis.Y, false)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        _binding = FragmentPieceCaptureBinding.inflate(inflater, container, false)
-        return binding.root
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View = screen {
+        val flash = remember { Animatable(0f) }
+        // Shutter flash, then back to the table where the analysis starts.
+        LaunchedEffect(taken) {
+            val file = taken ?: return@LaunchedEffect
+            flash.snapTo(0.9f)
+            flash.animateTo(0f, tween(260))
+            setFragmentResult(RESULT_KEY, bundleOf(PHOTO_PATH to file.absolutePath))
+            findNavController().navigateUp()
+        }
+        PieceCaptureScreen(
+            onPreviewReady = { previewView = it; openCamera() },
+            torchOn = torch,
+            shutterEnabled = shutterEnabled,
+            flash = flash.value,
+            onClose = { findNavController().navigateUp() },
+            onTorch = { torch = !torch; camera?.cameraControl?.enableTorch(torch) },
+            onShutter = ::takePhoto,
+        )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         executor = Executors.newSingleThreadExecutor()
-        binding.buttonClose.setOnClickListener { findNavController().navigateUp() }
-        binding.buttonTorch.setOnClickListener {
-            torch = !torch
-            camera?.cameraControl?.enableTorch(torch)
-            binding.buttonTorch.alpha = if (torch) 1f else 0.6f
-        }
-        binding.buttonTorch.alpha = 0.6f
-        binding.shutter.setOnClickListener { takePhoto() }
-        binding.shutter.setOnTouchListener { v, e ->
-            when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(90).start()
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(160).start()
-            }
-            false
-        }
+    }
 
+    /** Called once the preview exists: start the camera, asking for the permission first if needed. */
+    private fun openCamera() {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
         else permission.launch(Manifest.permission.CAMERA)
     }
@@ -82,9 +98,9 @@ class PieceCaptureFragment : Fragment() {
         val future = ProcessCameraProvider.getInstance(requireContext())
         future.addListener({
             // The provider can come back after the user already left this screen.
-            val b = _binding ?: return@addListener
+            val view = previewView ?: return@addListener
             val provider = future.get()
-            val preview = Preview.Builder().build().also { it.setSurfaceProvider(b.previewView.surfaceProvider) }
+            val preview = Preview.Builder().build().also { it.setSurfaceProvider(view.surfaceProvider) }
             imageCapture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY).build()
             try {
                 provider.unbindAll()
@@ -97,25 +113,16 @@ class PieceCaptureFragment : Fragment() {
 
     private fun takePhoto() {
         val capture = imageCapture ?: return
-        binding.shutter.isEnabled = false
+        shutterEnabled = false
         val file = File(requireContext().cacheDir, "piece_${System.currentTimeMillis()}.jpg")
         capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), executor, object : ImageCapture.OnImageSavedCallback {
             override fun onError(e: ImageCaptureException) {
                 Log.e(TAG, "Capture failed", e)
-                activity?.runOnUiThread { _binding?.shutter?.isEnabled = true }
+                shutterEnabled = true
             }
 
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                activity?.runOnUiThread {
-                    val b = _binding ?: return@runOnUiThread
-                    // Shutter flash, then back to the table where the analysis starts.
-                    b.flash.alpha = 0.9f
-                    b.flash.animate().alpha(0f).setDuration(260).withEndAction {
-                        if (_binding == null) return@withEndAction
-                        setFragmentResult(RESULT_KEY, bundleOf(PHOTO_PATH to file.absolutePath))
-                        findNavController().navigateUp()
-                    }.start()
-                }
+                taken = file
             }
         })
     }
@@ -123,8 +130,8 @@ class PieceCaptureFragment : Fragment() {
     override fun onDestroyView() {
         camera?.cameraControl?.enableTorch(false)
         executor.shutdown()
+        previewView = null
         super.onDestroyView()
-        _binding = null
     }
 
     companion object {
