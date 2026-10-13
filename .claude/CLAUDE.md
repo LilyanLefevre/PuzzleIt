@@ -1,6 +1,6 @@
 # PuzzleHelper (PuzzleIt)
 
-Android app (Kotlin, XML + Material 3, Hilt, Room, CameraX, OpenCV for box framing). Recognition is 100 % on the phone; sign-in to the owner's own server (PocketBase) is required and keeps the puzzles in sync (see Known limits).
+Android app (Kotlin, Jetpack Compose + Material 3, Hilt, Room, CameraX, OpenCV for box framing). Recognition is 100 % on the phone; sign-in to the owner's own server (PocketBase) is required and keeps the puzzles in sync (see Known limits).
 Photograph a loose puzzle piece -> the app shows where it goes on the box image and how to turn it.
 The owner speaks French: talk to them in French; code, comments and commit messages in English.
 
@@ -16,7 +16,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 
 ## Code map (`app/src/main/java/com/lilyan_lefevre/puzzleit`) - package by feature, MVVM
 - `core/database` (Room, migrations in one file, Hilt module), `core/image` (shared image helpers), `core/ui` (reusable
-  views). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
+  Compose pieces: `theme/PuzzleTheme`, `PuzzleComponents`, `PuzzleLoader`, `FileImage`, `screen {}`; and the hand-drawn `QuadSelectionView`). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
 - `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, adapter,
   ProjectListViewModel), `create/` (ProjectCreation + PuzzleBounds fragments and ViewModels, BoxImageProcessor, GridProcessor).
 - `feature/puzzle/` the table: PuzzleWorkingFragment + ViewModel (`ScanState`, follows the project live, edit/delete),
@@ -45,7 +45,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   Tests run signed in on throw-away prefs: `TestAccountModule` (androidTest and test source sets) replaces `AccountModule` through Hilt; `ProjectSetupTest` is a Hilt Robolectric test for that reason (no Android Keystore on the JVM).
 - Fragments only render state, handle system intents and navigate; IO, image work and validation live in ViewModels
   or injected classes.
-- Docs: `documentation/` (French, numbered pages: the science 01-06, validation 07, AI experiment 08) and
+- Docs: `documentation/` (French, numbered pages: the science 01-06, validation 07, AI experiment 08, Compose UI 09) and
   `documentation/screenshots` (README images). No other docs folder.
 
 ## Code conventions (follow the existing patterns)
@@ -56,23 +56,23 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   after handling (`errorShown()`, `savedHandled()`). Live data from Room: `repository.flow().stateIn(viewModelScope, ...)`.
 - **Errors**: string resource ids (`@StringRes Int`), never hard-coded text; every string exists in `values` and
   `values-fr`.
-- **Fragments**: ViewBinding with `_binding` nulled in `onDestroyView`; collect in
-  `viewLifecycleOwner.lifecycleScope.launch { repeatOnLifecycle(STARTED) { launch { ... } } }`; navigation with nav
-  graph actions; transitions `MaterialSharedAxis` X between screens, Y for the camera.
-- **Result sheet**: a real `BottomSheetBehavior` with four levels - peek (the leads with their %), half (piece next to the box), full ("why these leads" cards with the blinking `LeadComparisonView`), hidden (the map is free, a "Leads" pill brings it back). Its on-screen position is `getLocationOnScreen`, NOT `top` (the behaviour moves it without changing the layout `top`); set levels in an `OnPreDrawListener` once the new state is laid out. No rows x columns anywhere in the UI (unknown before the border is complete): the position is a zone + percentages.
+- **Screens (Compose, see `documentation/09-compose.md`)**: each screen is a stateless `@Composable XScreen(data..., onAction...)` next to its Fragment; the Fragment only navigates, asks permissions,
+  shows Toasts and returns `screen { ... }` from `onCreateView` (state read with `collectAsStateWithLifecycle()`). No ViewBinding, no `res/layout`. Navigation with nav graph actions;
+  transitions `MaterialSharedAxis` X between screens, Y for the camera. Every screen has a `@Preview` and `testTag`s named like the old view ids (tests and the demo recorder use them).
+  Screens use `core/ui` components (`PrimaryButton`, `RoundIconButton`...), never a raw Material button.
+- **Result sheet**: `LevelSheet` / `LevelSheetState` (own drag + nested-scroll code, not Material's sheet) with four levels - peek (the leads with their %), half (piece next to the box), full ("why these leads" cards with the blinking `LeadComparison`), hidden (the map is free, a "Leads" pill brings it back). The peek and half heights are measured in `ResultContent` (`onGloballyPositioned`) and become the anchors; the map's bottom inset follows the level. No rows x columns anywhere in the UI (unknown before the border is complete): the position is a zone + percentages.
 - **Threading**: IO / image work in injected `@Singleton` classes with `withContext(Dispatchers.IO|Default)`; Bitmaps
   are decoded with a size cap (`inSampleSize`).
-- **Custom views**: draw everything in `onDraw` (no child views), one infinite `ValueAnimator` clock started/stopped in
-  attach/detach, colours from `R.color`.
+- **Custom drawing**: in Compose, a `Canvas` with one `rememberInfiniteTransition` clock (`PuzzleLoader`, `LeadComparison`, the viewfinder). `PuzzleMapView`, `QuadSelectionView` and CameraX's `PreviewView` stay
+  Views (gestures / camera), wrapped by `PuzzleMap`, `PuzzleBoundsScreen` and `PieceCaptureScreen` with `AndroidView`; their View code keeps the old rule (everything in `onDraw`, colours from `R.color`).
 - **Comments**: KDoc one-liner on each class saying what it is for; inline comments only for the non-obvious *why*.
   Imports sorted, no unused ones, no wildcard imports of project packages.
-- **UI design**: dark "puzzle night" theme only. Use the tokens, not raw values: colours `puzzle_*` (`background`,
-  `surface`, `surface_high`, `outline`, `primary` = citron accent, `secondary` = violet, `warning`, `error`),
-  font `@font/space_grotesk_family`, text styles `Text.Display` (titles) / `Text.Eyebrow` (small caps labels), widgets
-  `Widget.Puzzle.Button`, `Widget.Puzzle.IconButton` (48dp round buttons on the map), `Widget.Puzzle.Chip`,
-  shapes `Shape.Puzzle.Small/Medium/Large` (12/20/28dp). Bottom sheet = `bg_sheet`, rounded 32dp top corners.
+- **UI design**: dark "puzzle night" theme only. Use the tokens, not raw values: colours `puzzle_*` in `values/colors.xml` (read by `PuzzleTheme` through `MaterialTheme.colorScheme`: `background`,
+  `surface`, `surfaceVariant` = surface_high, `outline`, `primary` = citron accent, `secondary` = violet, `error`; `PuzzleColors` for `warning` / `scrim` / `secondaryText`),
+  font Space Grotesk (in the theme), `PuzzleText.display(size)` (titles) / `PuzzleText.eyebrow` (small caps labels), `RoundIconButton` (48dp round buttons), `PrimaryButton` / `TonalButton`,
+  shapes 12/20/28dp (`MaterialTheme.shapes`). Bottom sheet: surface, 1dp outline, rounded 32dp top corners (`LevelSheet`).
   Animate state changes (`TransitionManager`, `animate()`), keep motion short (300-900 ms).
-- **Tests**: JVM tests for algorithm logic (one runnable check per non-trivial piece of logic), Espresso e2e tests for
+- **Tests**: JVM tests for algorithm logic (one runnable check per non-trivial piece of logic), Compose e2e tests (`createEmptyComposeRule`, nodes by `testTag`) for
   user journeys with `waitFor { ... }` polling instead of sleeps for async states; e2e tests seed their own data.
 
 ## Working with the owner
