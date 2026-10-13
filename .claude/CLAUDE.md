@@ -17,10 +17,10 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 ## Code map (`app/src/main/java/com/lilyan_lefevre/puzzleit`) - package by feature, MVVM
 - `core/database` (Room, migrations in one file, Hilt module), `core/image` (shared image helpers), `core/ui` (reusable
   Compose pieces: `theme/PuzzleTheme`, `PuzzleComponents`, `PuzzleLoader`, `FileImage`, `screen {}`; and the hand-drawn `QuadSelectionView`). No other cross-feature package: no `util`, `utils`, `shared`, `constants`.
-- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, adapter,
+- `feature/project/` `data/` (Project, ProjectDao, ProjectRepository, ImageStorageManager), `list/` (fragment, `ProjectListScreen`,
   ProjectListViewModel), `create/` (ProjectCreation + PuzzleBounds fragments and ViewModels, BoxImageProcessor, GridProcessor).
 - `feature/puzzle/` the table: PuzzleWorkingFragment + ViewModel (`ScanState`, follows the project live, edit/delete),
-  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureFragment + ScanFrameView.
+  PuzzleMapView (leads = piece-sized squares, tappable, clipped to the visible map); `capture/` PieceCaptureFragment + `PieceCaptureScreen` (the viewfinder is drawn in Compose).
 - `feature/recognition/` `PieceReranker.kt` + `OnnxEmbedder.kt` (assets/reranker.onnx: embeddings of the piece and of the box squares), `PieceSegmenter.kt` + `OnnxSegmenter.kt`
   (assets/segmenter.onnx = U2-Net-small cuts the piece out; table-colour segmentation is the fallback), `PieceMatcher.kt` - the algorithm, pure Kotlin (JVM-testable): grid pre-cut,
   segmentation, **whole-box network search** (`buildIndex` = embeddings of every half-cell square, built in the background by `PieceRecognizer` and cached next to the reference
@@ -151,6 +151,14 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - A remote Windows PC with an AMD GPU (PyTorch via DirectML) runs the AI experiments and the long benchmarks; how to reach it and what is on it: `CLAUDE.local.md` (not versioned).
 
 ## Known limits / next steps
+### State on 2026-10-13 (UI in Compose)
+- The whole UI is Jetpack Compose (PR #5, squash-merged): 9 Fragments kept as hosts (`screen { XScreen(...) }`), no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
+  Verified: JVM unit tests, the 12 `ScanFlowTest` journeys on an API 34 emulator (one at a time: the Intel Mac's emulator is slow, disable Google Play services on the AVD or it ANRs), CI on Pixel 6 + small phone, the owner built and tried it.
+  **Not verified**: `DemoTourTest` (ported to the accessibility tree + `input` events, never run), a real phone, creating a puzzle with the real camera, the corner framing.
+- README images and video (`documentation/screenshots`) still show the old UI: regenerate them with `DemoTourTest` (needs the phone or the emulator and `-e demoPuzzle`).
+- **Next: Navigation Compose** (separate PR, after the owner validated and merged PR #5): replace `nav_graph.xml` + Fragments by a `NavHost` in `MainActivity` (needs `navigation-compose` and `hilt-navigation-compose`). To redo: Safe Args -> typed routes, `setFragmentResult` (framing, camera) -> `savedStateHandle`, `MaterialSharedAxis` transitions -> Compose transitions, the e2e photo injection (it uses the fragment-result channel), the camera's lifecycle binding, `MainActivity.ownHeader` and the login redirect.
+- Local build: the project lives in iCloud Documents; `app/build`, `build` and `.kotlin` are `*.nosync` folders with symlinks (ignored by git) so iCloud stops adding "* 2" copies. If a build still fails on one: `rm -rf app/build.nosync/*`.
+
 ### State on 2026-10-11 (before v0.2.0)
 - v0.1.0 released (signed APK on GitHub, release.yml; keystore: see `CLAUDE.local.md`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
   bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag `v0.2.0`. Done since v0.1.0: mandatory login (+ Google and other providers), production server built in, retake of the box photo
@@ -175,8 +183,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. Pablo Moreira's DINOv2 piece classifier
   (363 MB, not embeddable) finds the white-gutter piece our model never finds: a patch-level cross-attention head is the research lead.
 - The box index (up to ~3,900 embeddings for 1,000 pieces) is built in the background on the phone: its build time there is not measured yet.
-- The project lives in iCloud Documents: iCloud creates `* 2.*` duplicates in `app/build` and Gradle fails in
-  `parseDebugLocalResources`. Fix: `rm -rf app/build`. Moving the project out of iCloud would fix it for good.
+- The project lives in iCloud Documents: iCloud used to create `* 2.*` duplicates in `app/build` and Gradle failed (`parseDebugLocalResources`, `hiltJavaCompileDebug`). The build folders are now `*.nosync` (see the 2026-10-13 state); moving the project out of iCloud would fix it for good.
 - onnxruntime sessions run WITHOUT memory pattern and CPU arena (`OnnxEmbedder`, `OnnxSegmenter`): the batches have many different sizes and
   with them native memory grew 30 MB per scan (408 MB after the box index) until a 2 GB device killed the app. `PieceRecognizerDeviceTest` prints the memory.
 - Leads 2-4 get a derived confidence (best confidence scaled by their own score).

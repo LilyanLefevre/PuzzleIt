@@ -94,3 +94,11 @@ graphe `nav_graph.xml`, les arguments sûrs et les transitions `MaterialSharedAx
   (`onNodeWithTag("buttonDismiss")`). `DemoTourTest` (la vidéo du README) n'utilise pas cette règle, qui gèlerait les
   animations infinies : il lit l'arbre d'accessibilité (les tags sont exposés comme identifiants) et envoie de vrais
   gestes `input`.
+
+## Suite prévue
+
+* **Navigation Compose** : remplacer `nav_graph.xml` et les 9 Fragments par un `NavHost` dans `MainActivity`
+  (une activité, zéro Fragment). Les écrans `XScreen` ne changent pas ; ce qui bouge, c'est la navigation, les
+  résultats entre écrans (cadrage, caméra), les transitions et les tests e2e.
+* Régénérer les images et la vidéo du README (elles montrent encore l'ancienne interface).
+
