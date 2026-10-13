@@ -19,3 +19,6 @@ __pycache__/
 .externalNativeBuild
 .cxx
 local.properties
+
+# Not versioned: infra details of the owner
+CLAUDE.local.md

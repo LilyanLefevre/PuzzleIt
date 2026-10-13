@@ -126,8 +126,8 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 
 ## Release
 - Tag `v<versionName>` (`app/build.gradle.kts`) -> `.github/workflows/release.yml` builds the signed APK and creates the GitHub release.
-  Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.);
-  without them `assembleRelease` gives an unsigned APK. The keystore and its passwords are in `C:\Users\Lilyan\.android-keys\` (outside the
+  Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.); without them `assembleRelease` gives an unsigned APK.
+  The keystore lives outside the repo (never commit it; lose the key and no update can be installed over an existing install: tell the owner to back it up). Where it is: `CLAUDE.local.md`.
   repo, never commit them; lose the key and no update can be installed over an existing install: tell the owner to back it up).
 - `assembleRelease` needs the network (lint-gradle is not in the offline cache). The APK is ~220 MB (ONNX Runtime + OpenCV for 4 ABIs).
 
@@ -149,26 +149,14 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - `PUZZLE_DUMP_DIR` makes the first two export each piece + the top-30 leads (`LeadDump`) for off-device experiments.
 
 ## Remote PC (heavy work: AI, long benchmarks)
-- `ssh pc` (key auth, alias in `~/.ssh/config`): Windows 11, Ryzen 5 7600X, 32 GB, **AMD Radeon RX 6800** -> PyTorch via
-  **DirectML** (`torch-directml`), not CUDA/ROCm. Default remote shell is `cmd.exe`.
-- `C:\dev\PuzzleHelper` (git clone of the public repo), `C:\dev\venv-puzzle` (Python 3.12: torch-directml, torchvision,
-  pillow, numpy), `C:\dev\data` (benchmark data + dumps, sent with `tar -cf - ... | ssh pc "tar -xf - -C C:/dev/data"`).
-- Run: `ssh pc 'cd /d C:\dev && venv-puzzle\Scripts\python <script> ...'`. Python on the Mac is a python.org build
-  without certificates: download with `curl`, not `urllib`.
-- Emulator: Android SDK in `%LOCALAPPDATA%\Android\Sdk`, AVD `puzzle34` (API 34 google_apis x86_64, WHPX). Start it
-  with `ssh pc 'powershell -ExecutionPolicy Bypass -File C:\dev\PuzzleHelper\tools\pc\start_emulator.ps1'` (launched
-  through WMI: OpenSSH kills its children on logout; session 0 has no GPU, hence swiftshader), then
-  `ssh pc 'C:\dev\PuzzleHelper\tools\pc\instrumented.cmd'` (pulls `main`, runs `connectedDebugAndroidTest`).
-  Error dialogs must stay hidden: a first-boot system ANR stole the window focus and failed 7 tests.
+- A remote Windows PC with an AMD GPU (PyTorch via DirectML) runs the AI experiments and the long benchmarks; how to reach it and what is on it: `CLAUDE.local.md` (not versioned).
 
 ## Known limits / next steps
 ### State on 2026-10-11 (before v0.2.0)
-- v0.1.0 released (signed APK on GitHub, release.yml; keystore in `C:\Users\Lilyan\.android-keys\`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
+- v0.1.0 released (signed APK on GitHub, release.yml; keystore: see `CLAUDE.local.md`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
   bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag `v0.2.0`. Done since v0.1.0: mandatory login (+ Google and other providers), production server built in, retake of the box photo
   (create and edit), double back arrows fixed, sync gaps closed (deletions, box photo, latest edit), new app icon (supplied PNGs, adaptive icon built with a 12 % inset; no monochrome/themed icon yet).
-- Server **in production**: PocketBase on the owner's Raspberry Pi (host `limar`, `ssh raspi` works with `~/.ssh/id_ed25519_raspi`, user `lilyan`, 64-bit, Docker), behind a Cloudflare Tunnel at `https://puzzleit.lilyan.app`.
-  A push touching `server/` rebuilds the image (GHCR, public package) and a GitHub self-hosted runner on the Pi redeploys it (`.github/workflows/server.yml`, clone in `~/PuzzleIt`; documented in `server/README.md`).
-  The Pi's old services (gitea, mailhog, portainer, traefik, gitea-runner) were removed at the owner's request, their data folders are left in `/home/docker`; `code-server` and `whoami` containers are still there (the owner asked to remove them, the permission classifier refused: they run it themselves).
+- Server **in production**: PocketBase on the owner's own server behind a Cloudflare Tunnel; a push touching `server/` rebuilds the image and a self-hosted runner redeploys it (`.github/workflows/server.yml`, documented in `server/README.md`). Hosts, SSH and what runs there: `CLAUDE.local.md`.
   The Google provider still has to be configured by the owner (Google Cloud OAuth client + PocketBase dashboard, steps in `server/README.md`); until then the login screen shows no provider button. Sign-up by password must be locked once their account exists.
 - Verified against a real local PocketBase (download its release, check the checksum, `pocketbase serve --dir <tmp> --migrationsDir server/pb_migrations --http=127.0.0.1:8095`; port 8090 is taken on the owner's PC), then
   `POCKETBASE_URL=http://127.0.0.1:8095 ./gradlew testDebugUnitTest --tests "*SyncIntegrationTest*"` (3 scenarios) and, with a fake Google provider enabled by a temporary migration, `POCKETBASE_OAUTH_URL=... --tests "*OAuthIntegrationTest*"`.
@@ -188,7 +176,6 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. Pablo Moreira's DINOv2 piece classifier
   (363 MB, not embeddable) finds the white-gutter piece our model never finds: a patch-level cross-attention head is the research lead.
 - The box index (up to ~3,900 embeddings for 1,000 pieces) is built in the background on the phone: its build time there is not measured yet.
-- When a session runs on the owner's PC (not the Mac), the data is in `C:\dev\data` (`real`, `pm4` = Puzzle-Map, `bank`, `train-images`) and the venv in `C:\dev\venv-puzzle`.
 - The project lives in iCloud Documents: iCloud creates `* 2.*` duplicates in `app/build` and Gradle fails in
   `parseDebugLocalResources`. Fix: `rm -rf app/build`. Moving the project out of iCloud would fix it for good.
 - onnxruntime sessions run WITHOUT memory pattern and CPU arena (`OnnxEmbedder`, `OnnxSegmenter`): the batches have many different sizes and
