@@ -3,7 +3,6 @@ package com.lilyan_lefevre.puzzleit.feature.project.create
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,7 +29,7 @@ fun PuzzleBoundsRoute(
     LaunchedEffect(confirmed) { confirmed?.let { onConfirmed(it.quadJson, it.rectifiedPath) } }
 
     // No toolbar any more: this screen draws its own header, like the others.
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(Modifier.fillMaxSize()) {
         ScreenHeader(stringResource(R.string.puzzle_bounds_title), onBack)
         Box(Modifier.weight(1f)) {
             PuzzleBoundsScreen(

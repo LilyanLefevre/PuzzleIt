@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,7 +101,7 @@ fun ProjectCreationRoute(
     }
 
     // No toolbar any more: this screen draws its own header, like the others ("New puzzle" or "Edit puzzle").
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(Modifier.fillMaxSize()) {
         ScreenHeader(stringResource(viewModel.titleRes()), onBack)
         Box(Modifier.weight(1f)) {
             ProjectCreationScreen(
