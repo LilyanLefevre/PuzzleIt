@@ -33,8 +33,8 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   `feature/progress/` (`data/`: `ProgressPhoto` + DAO + `ProgressRepository`; `ProgressRoute` takes the photo with the system camera). Both tables are deleted with their puzzle
   (FK cascade; the files live in `files/<projectId>/scans|progress`, removed with the puzzle's folder). DB version 7 (`ProjectMigration5` and `6`, covered by `ScanHistoryTest`; `updatedAt` = last edit of a puzzle, the sync keeps the newest).
   The result sheet asks "is that where the piece goes?" (`PuzzleWorkingViewModel.evaluate`): verdicts are the future real-world training / evaluation data.
-- `feature/account/` (`data/`: `PocketBaseClient` (password + PocketBase's OAuth2 flow over `/api/realtime`), `AccountStore` on encrypted prefs, `AccountModule` (OkHttp + prefs), `SyncRepository`, `isAcceptableServer`;
-  `LoginRoute` (email/password + one "Continue with ..." button per provider in the server's `auth-methods`), `AccountRoute` (who is signed in, sign out), one `AccountViewModel`). The server is `BuildConfig.PUZZLEIT_SERVER`
+- `feature/account/` (`data/`: `PocketBaseClient` (PocketBase's OAuth2 flow over `/api/realtime`), `AccountStore` on encrypted prefs, `AccountModule` (OkHttp + prefs), `SyncRepository`, `isAcceptableServer`;
+  `LoginRoute` (one "Continue with ..." button per provider in the server's `auth-methods`), `AccountRoute` (who is signed in, sign out), one `AccountViewModel`). The server is `BuildConfig.PUZZLEIT_SERVER`
   (`-PpuzzleitServer=...` overrides it), not typed. `MainActivity` picks the start destination from `AccountStore` and navigates to/from login when the account appears/disappears (sign-out, 401).
   Repositories that delete things (`ProjectRepository`, `ScanHistoryRepository`, `ProgressRepository`) call `AccountStore.markDeleted` so the next sync tells the server (`deletions` collection, so the other phones delete too).
   Sync rules (`SyncRepository`): deletions replayed then applied, latest `updatedAt` wins for name/pieces/grid, newest `photoId` (date in the file name) wins for the box photo.
@@ -175,11 +175,10 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 ### Tasks now
 1. **Release v0.2.0** (bump, tag, check the release workflow, tell the owner to back up the keystore). Before: the owner configures Google, locks the sign-up, and tries the login on their phone in 4G (never done with a real Google account).
 2. Sync gaps left: no sync while the app is closed (WorkManager, a dependency to ask the owner about; the app syncs on show and when it goes to the background); a puzzle edited on two phones before they sync keeps only the later edit.
-   The login screen reads the providers once when it opens: nothing is shown (and nothing said) if the server was unreachable then (a retry or a message is open).
+   The login screen reads the providers once when it opens: if the server was unreachable it says so (no retry button: reopen the app).
 3. Themed (monochrome) app icon: needs a transparent silhouette of the logo, the supplied zip has none. The Play Store icon (`playstore-icon.png`, 512 px) and the iOS sets of that zip are not in the repo.
 4. Use the progress photos to help the localisation (the reason they exist), measure the box index build time on the phone for La vague (never done).
 5. Owner's phone: wireless adb drops often; run tests there with `installDebug installDebugAndroidTest` + `am instrument` (animations off, restore them after), never `connectedDebugAndroidTest`.
-6. **Remove account creation, keep only Google sign-in** (owner, 2026-10-13): the server already refuses password sign-up (commit 5500470); remove what is left of it on the app side (email/password form and any "create account" path in `LoginFragment` / `AccountViewModel` / `PocketBaseClient`), keep the "Continue with Google" button, update the strings (`values` + `values-fr`), the tests (`TestAccountModule`, `SyncIntegrationTest` sign-in helpers) and `server/README.md`.
 - First-lead accuracy is below target on the owner's real photos (Famillez 30 %), especially on near-uniform pieces (white gutter between two photos, plain foam/sky of La vague). Tried and rejected
   (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. Pablo Moreira's DINOv2 piece classifier
   (363 MB, not embeddable) finds the white-gutter piece our model never finds: a patch-level cross-attention head is the research lead.

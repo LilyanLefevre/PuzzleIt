@@ -70,11 +70,12 @@ class PocketBaseClient @Inject constructor(private val http: OkHttpClient) {
     private fun jsonBody(vararg pairs: Pair<String, String>): RequestBody =
         JSONObject(mapOf(*pairs)).toString().toRequestBody("application/json".toMediaType())
 
+    /** Password sign-in, only used by [register] for the integration tests: the app has no password screen. */
     suspend fun signIn(server: String, email: String, password: String): Session =
         session(JSONObject(call(Request.Builder().url("${base(server)}/api/collections/users/auth-with-password")
             .post(jsonBody("identity" to email, "password" to password)).build())))
 
-    /** Creates the account, then signs in. */
+    /** Creates the account, then signs in. Integration tests only (the production server refuses it). */
     suspend fun register(server: String, email: String, password: String): Session {
         call(Request.Builder().url("${base(server)}/api/collections/users/records")
             .post(jsonBody("email" to email, "password" to password, "passwordConfirm" to password)).build())

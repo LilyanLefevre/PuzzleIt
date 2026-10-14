@@ -111,8 +111,7 @@ Rate limits (20 sign-in attempts a minute, 300 API calls per 10 s, per IP) come 
 - **Back up `pb_data/`** (accounts, records and photos are all in it).
 - The app only sends a password over `https://` (plain `http://` is accepted for a home-network address only). The production server gets its HTTPS from the Cloudflare Tunnel above;
   without a tunnel, put a reverse proxy such as [Caddy](https://caddyserver.com) in front (`puzzleit.example.com { reverse_proxy localhost:8090 }`).
-- Accounts are created only through an OAuth2 provider ([`5_signup_oauth_only.js`](pb_migrations/5_signup_oauth_only.js)): password sign-up is refused by the API (the "Create account"
-  button of the app gets that refusal). Sign in with Google once to create an account, then it works like any other. The local integration tests below sign up by password, so start their server
+- Accounts are created only through an OAuth2 provider ([`5_signup_oauth_only.js`](pb_migrations/5_signup_oauth_only.js)): password sign-up is refused by the API (the app has no password form or "Create account" button any more: only the provider buttons). Sign in with Google once to create an account, then it works like any other. The local integration tests below sign up by password, so start their server
   with a temporary migration that sets `users.createRule` back to `""`. For sign-in-only-for-me, also switch the OAuth2 provider off for strangers by keeping the Google consent screen on "Testing" with your own address as test user.
 - Each account is capped at 50 puzzles by [`pb_hooks/quota.pb.js`](pb_hooks/quota.pb.js), and [`3_harden_rules.js`](pb_migrations/3_harden_rules.js) forbids changing a record's `owner`
   and attaching a scan or photo to someone else's puzzle.

@@ -32,7 +32,7 @@ Demo box images: Hokusai's *The Great Wave*, Van Gogh's *The Starry Night* and M
 - Say whether the lead on screen was right ("Is that where the piece goes?"): the answer is kept with the scan.
 - Scan history per puzzle: photo of the piece, where it was sent, confidence, and your verdict.
 - Progress photos per puzzle: photograph the puzzle as it stands, dated, to follow it grow.
-- Sign-in is required: by email and password, or with a provider the server offers (Google...). The app opens on the login screen and returns to it after a sign-out.
+- Sign-in is required: only with a provider the server offers (Google...), no account creation by password. The app opens on the login screen and returns to it after a sign-out.
 - Your puzzles, scans, verdicts and progress photos are kept on the PuzzleIt server ([`server/`](server/README.md), a PocketBase) and follow you from phone to phone.
   The sync runs by itself, there is no sync button: whatever you create, edit or delete is sent a couple of seconds later, wherever you are in the app. The latest edit wins, and a deletion
   or a retaken box photo reaches your other phones too.
