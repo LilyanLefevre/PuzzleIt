@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.os.ParcelFileDescriptor
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -67,10 +68,16 @@ class DemoTourTest {
         shell("input swipe ${x.toInt()} ${fromY.toInt()} ${x.toInt()} ${toY.toInt()} $ms")
     }
 
-    /** Where the node tagged [tag] is on the screen, or null when it is not shown. */
-    private fun bounds(tag: String): Rect? =
-        instrumentation.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByViewId(tag)?.firstOrNull()
-            ?.let { node -> Rect().also(node::getBoundsInScreen) }
+    /** Where the node tagged [tag] is on the screen, or null when it is not shown. Compose does not answer findAccessibilityNodeInfosByViewId: walk the tree. */
+    private fun bounds(tag: String): Rect? {
+        fun find(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (node == null) return null
+            if (node.viewIdResourceName == tag) return node
+            for (i in 0 until node.childCount) find(node.getChild(i))?.let { return it }
+            return null
+        }
+        return find(instrumentation.uiAutomation.rootInActiveWindow)?.let { Rect().also(it::getBoundsInScreen) }
+    }
 
     private fun shown(tag: String): Rect = checkNotNull(bounds(tag)) { "$tag is not on the screen" }
 
@@ -141,29 +148,34 @@ class DemoTourTest {
             tap("project_${project.id}")
             waitFor { shown("buttonCapturePiece") }
             val recorder = instrumentation.uiAutomation.executeShellCommand("screenrecord --size 720x1544 --bit-rate 14000000 /sdcard/demo.mp4")
-            Thread.sleep(2500)
+            try {
+                Thread.sleep(2500)
 
-            send(scenario, photo)
-            waitFor { shown("groupResult") }
-            Thread.sleep(3500)
+                send(scenario, photo)
+                waitFor { shown("groupResult") }
+                Thread.sleep(3500)
 
-            var width = 0f; var height = 0f
-            scenario.onActivity { width = it.window.decorView.width.toFloat(); height = it.window.decorView.height.toFloat() }
+                var width = 0f; var height = 0f
+                scenario.onActivity { width = it.window.decorView.width.toFloat(); height = it.window.decorView.height.toFloat() }
 
-            tap("chipLead2"); Thread.sleep(2500)
-            tap("chipLead1"); Thread.sleep(2000)
-            swipe(width / 2, sheetTop(), 0.04f * height, 900); Thread.sleep(2000)    // full level: why these leads
-            repeat(3) { swipe(width / 2, 0.8f * height, 0.35f * height, 900); Thread.sleep(1500) }
-            repeat(3) { swipe(width / 2, 0.35f * height, 0.8f * height, 700); Thread.sleep(600) }
-            Thread.sleep(800)
-            tap("explainCard1", low = true)   // a card leads to the map
-            Thread.sleep(3000)
-            swipe(width / 2, sheetTop(), 0.995f * height, 200); Thread.sleep(2500)    // a flick hides the sheet: the map is free
-            tap("pillLeads"); Thread.sleep(3000)
-
-            shell("kill -2 ${shell("pidof screenrecord").trim()}")   // SIGINT: the recorder finishes the file
-            Thread.sleep(2000)
-            recorder.close()
+                tap("chipLead2"); Thread.sleep(2500)
+                tap("chipLead1"); Thread.sleep(2000)
+                swipe(width / 2, sheetTop(), 0.04f * height, 900); Thread.sleep(2000)    // full level: why these leads
+                repeat(3) { swipe(width / 2, 0.8f * height, 0.35f * height, 900); Thread.sleep(1500) }
+                Thread.sleep(800)
+                // The cards are not in the accessibility tree (UiAutomator never lists them): the three swipes always stop on the same spot, with the text of a card
+                // (not its blinking picture, which only freezes) at 76 % of the height. A card leads to the map.
+                shell("input tap ${(width / 2).toInt()} ${(0.76f * height).toInt()}")
+                Thread.sleep(3000)
+                swipe(width / 2, sheetTop(), 0.995f * height, 200); Thread.sleep(2500)    // a flick hides the sheet: the map is free
+                // The pill comes with the end of the hide animation; its tag is read late (or not at all) on some runs, so fall back to where it sits (bottom centre).
+                try { waitFor(5_000) { shown("pillLeads") }; tap("pillLeads") } catch (e: Throwable) { shell("input tap ${(0.52f * width).toInt()} ${(0.94f * height).toInt()}") }
+                Thread.sleep(3000)
+            } finally {
+                shell("kill -2 ${shell("pidof screenrecord").trim()}")   // SIGINT: the recorder finishes the file
+                Thread.sleep(2000)
+                recorder.close()
+            }
         }
     }
 
@@ -223,6 +235,22 @@ class DemoTourTest {
         } finally {
             runBlocking { ids.forEach { repository.deleteProject(it) } }
             files.forEach { it.delete() }
+        }
+    }
+
+    /** Emulator only: leaves "La vague" (wave.jpg of `-e demoBoxDir <dir>`, public domain) on the device for [tour], which films an existing puzzle. */
+    @Test
+    fun seedWave() {
+        hilt.inject()
+        assumeTrue("emulator only: it would add a puzzle to a real phone", android.os.Build.HARDWARE == "ranchu" || android.os.Build.HARDWARE == "goldfish")
+        val dir = InstrumentationRegistry.getArguments().getString("demoBoxDir")
+        assumeTrue("needs -e demoBoxDir <dir with wave.jpg>", dir != null)
+        val art = BitmapFactory.decodeFile(File(dir, "wave.jpg").path)
+        val cols = sqrt(1000 * art.width.toFloat() / art.height).roundToInt()
+        val ref = TestImages.save(art, ctx.filesDir, "demo_wave.jpg").absolutePath
+        runBlocking {
+            repository.deleteProject("demo-wave")
+            repository.createProject("demo-wave", ref, ref, ref, "La vague", 1000, (1000 / cols.toFloat()).roundToInt(), cols, "medium", null)
         }
     }
 
