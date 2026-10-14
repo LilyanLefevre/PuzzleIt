@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -41,7 +42,8 @@ class MainActivity : AppCompatActivity() {
         setContent {
             PuzzleTheme {
                 // testTagsAsResourceId: the tests tag nodes with names (like the old view ids), and the screen recorder / UiAutomator read them as ids.
-                Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }, color = MaterialTheme.colorScheme.background) {
+                // targetSdk 36 forces edge-to-edge: keep every screen out of the status bar, the navigation bar and the keyboard.
+                Surface(Modifier.fillMaxSize().safeDrawingPadding().semantics { testTagsAsResourceId = true }, color = MaterialTheme.colorScheme.background) {
                     navController = rememberNavController()
                     PuzzleNavHost(navController, accountStore)
                 }
