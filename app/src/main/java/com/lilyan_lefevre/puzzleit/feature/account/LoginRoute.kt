@@ -18,6 +18,8 @@ fun LoginRoute(viewModel: AccountViewModel = hiltViewModel()) {
     val context = LocalContext.current
     val providers by viewModel.providers.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val loading by viewModel.providersLoading.collectAsStateWithLifecycle()
+    val serverDown by viewModel.providersFailed.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val openUrl by viewModel.openUrl.collectAsStateWithLifecycle()
 
@@ -35,8 +37,10 @@ fun LoginRoute(viewModel: AccountViewModel = hiltViewModel()) {
     val failed = notice as? Notice.Failed
     LoginScreen(
         providers = providers,
-        busy = busy,
+        busy = busy || loading,
+        serverUnreachable = serverDown,
         error = failed?.let { f -> f.reason?.let { stringResource(it) } ?: stringResource(R.string.sync_failed, f.detail) },
         onProvider = viewModel::signInWith,
+        onRetry = viewModel::loadProviders,
     )
 }
