@@ -40,9 +40,20 @@ android {
         }
     }
 
+    // One APK per CPU: ONNX Runtime and OpenCV ship native libraries for every ABI, a phone needs only its own.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     buildTypes {
         release {
             if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
+            // R8 stays off for now: the instrumented tests cannot run against a minified build yet. A first set of keep rules is in proguard-rules.pro.
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -173,4 +184,16 @@ dependencies {
 // The desktop onnxruntime replaces the Android one (same classes, different natives) on the JVM test classpath.
 configurations.matching { it.name.contains("UnitTest") }.configureEach {
     exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
+}
+
+// Each ABI gets its own versionCode (base * 10 + 2 for arm64-v8a, + 3 for x86_64), always above the universal APK of v0.2.1 (versionCode 3), so updating over it works.
+androidComponents {
+    onVariants { variant ->
+        val abiCodes = mapOf("arm64-v8a" to 2, "x86_64" to 3)
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
+            val base = output.versionCode.get()
+            if (abi != null) output.versionCode.set(base * 10 + abiCodes.getValue(abi))
+        }
+    }
 }

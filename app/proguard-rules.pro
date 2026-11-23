@@ -18,4 +18,18 @@
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
-#-renamesourcefileattribute SourceFile
+#-renamesourcefileattribute SourceFile# R8 rules for the release build. Keep line numbers for readable stack traces.
+-keepattributes SourceFile,LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
+
+# Native code calls these classes by name (JNI).
+-keep class ai.onnxruntime.** { *; }
+-keep class org.opencv.** { *; }
+
+# Typed navigation routes and the models of the server: kotlinx.serialization looks serializers up by name.
+-keepclassmembers class **$$serializer { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class ** {
+    static ** Companion;
+    *** Companion;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.lilyan_lefevre.puzzleit.**$$serializer { *; }
