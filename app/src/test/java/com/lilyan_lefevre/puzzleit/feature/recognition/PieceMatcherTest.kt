@@ -165,4 +165,20 @@ class PieceMatcherTest {
         val g = Grid.forPuzzle(1000, 1.5f)
         assertEquals(1000.0, g.count.toDouble(), 40.0)
     }
+
+    @Test
+    fun progressPhotoShowsThePlacedCellsButNotThePiecesInHand() {
+        val ref = boxArt(11)
+        val grid = Grid.forPuzzle(pieces, refW / refH.toFloat())
+        val loose = (0 until 20).map { 1 + it % (grid.cols - 2) + (1 + it % (grid.rows - 2)) * grid.cols }.toSet()
+        val on = SimulatedProgress.placed(grid, 0.5f, loose, Random(3))
+        val est = ProgressPrior.estimate(ref, SimulatedProgress.photo(ref, grid, on, Random(4)), grid)
+        val found = on.indices.count { on[it] && est[it] > 0.5f }
+        val wrong = on.indices.count { !on[it] && est[it] > 0.5f }
+        println("progress: placed ${on.count { it }}, found $found, bare called placed $wrong of ${on.count { !it }}")
+        // Smooth blobs have little texture inside a cell: the estimator finds 60 of 147 here, it must above all never invent one.
+        assertTrue(found > 0.3f * on.count { it })
+        assertTrue(wrong <= on.count { !it } / 50)
+        assertTrue(loose.none { est[it] > 0.5f })
+    }
 }

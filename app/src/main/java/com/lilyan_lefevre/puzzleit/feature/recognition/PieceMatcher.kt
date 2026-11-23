@@ -317,9 +317,24 @@ class PieceMatcher(
         fun z(v: DoubleArray): DoubleArray { val m = v.average(); val sd = sqrt(v.sumOf { (it - m) * (it - m) } / v.size).coerceAtLeast(1e-9); return DoubleArray(v.size) { (v[it] - m) / sd } }
         val zs = z(s); val zd = z(d)
         // A piece read as having no flat side cannot be on the puzzle's border: its candidates there lose [borderCost] z-units.
-        val fused = DoubleArray(c.size) { zs[it] - EMBED_COLOUR_WEIGHT * zd[it] - (if (borderCost > 0 && borderSides(c[it]).isNotEmpty()) borderCost else 0.0) }
+        val fused = DoubleArray(c.size) { zs[it] - EMBED_COLOUR_WEIGHT * zd[it] - (if (borderCost > 0 && borderSides(c[it]).isNotEmpty()) borderCost else 0.0) - PLACED_COST * placedAt(c[it]) }
         return c.indices.sortedByDescending { fused[it] }
             .map { c[it].copy(rotationDeg = (((qBest[it] * 90 - tilt) % 360 + 360) % 360).roundToInt() % 360, quarter = qBest[it], score = fused[it].toFloat(), simZ = zs[it].toFloat(), colourZ = zd[it].toFloat()) }
+    }
+
+    /** Per grid cell (row-major), how sure we are that it is already placed on the table ([ProgressPrior]); null = unknown. */
+    @Volatile var placed: FloatArray? = null
+
+    /** Share of the piece-sized square at [c] that lies on placed cells: a piece in hand is not already on the table. */
+    private fun placedAt(c: Candidate): Double {
+        val p = placed ?: return 0.0
+        var s = 0.0
+        for (y in floor(c.row - 0.5f).toInt()..floor(c.row + 0.5f - 1e-3f).toInt()) for (x in floor(c.col - 0.5f).toInt()..floor(c.col + 0.5f - 1e-3f).toInt()) {
+            if (x !in 0 until grid.cols || y !in 0 until grid.rows) continue
+            val ov = (min(c.col + 0.5f, x + 1f) - max(c.col - 0.5f, x.toFloat())) * (min(c.row + 0.5f, y + 1f) - max(c.row - 0.5f, y.toFloat()))
+            s += ov * p[y * grid.cols + x]
+        }
+        return s
     }
 
     private fun precisionOf(conf: Int) = when {
@@ -872,6 +887,8 @@ class PieceMatcher(
         /** Search the whole box with the network (not only the colour matcher's top leads). */
         var GLOBAL_EMBED = true
         var EMBED_COLOUR_WEIGHT = 0.5
+        /** z-units taken off a place lying wholly on cells the last progress photo shows as placed. */
+        var PLACED_COST = 2.0
         const val CELL_CONF = 55
         const val ZONE_CONF = 30
 

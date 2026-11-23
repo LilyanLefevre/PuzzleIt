@@ -229,6 +229,46 @@ a-b, jusqu'à 24, plus 3 à 31 en clarté), alors que les mauvaises pistes ont u
 couleurs éliminerait donc la bonne réponse ; l'app compare des structures, donc des pièces à peu près unies (ciel, mur) ou à
 bande blanche ressemblent à beaucoup d'endroits d'un collage.
 
+## Photo d'avancement : exclure les cases déjà posées (essai, non branché dans l'app)
+
+Idée : une pièce en main n'est pas déjà posée. Si la dernière photo d'avancement, cadrée sur les 4 coins du puzzle comme la
+boîte, montre quelles cases sont déjà sur la table, les pistes qui y tombent perdent des points.
+
+- `ProgressPrior.estimate(boîte, photo cadrée, grille)` : par case, 4 × 4 blocs de couleur Lab, moyenne retirée par canal
+  (exposition, balance des blancs, lumière de côté sans effet), corrélation avec la boîte, décalage de ± 1/4 de case permis
+  pour le cadrage. Case « posée » si la corrélation dépasse 0,7 ; une case unie (ciel) n'est jamais déclarée posée.
+- `PieceMatcher.placed` : la part du carré de la piste qui tombe sur des cases posées coûte `PLACED_COST` = 2 unités z dans
+  `fuse`. `null` (par défaut, et dans l'app aujourd'hui) = aucun changement.
+- Banc : `SimulatedProgress` (tests) pose une part des cases (la bordure, puis des îlots), jamais la pièce scannée, et fabrique
+  la photo cadrée (chaque coin décalé jusqu'à 0,3 case, balance des blancs, exposition, lumière, grain, table nue ailleurs).
+  `PUZZLE_PROGRESS=0.3,0.6,0.6o` mesure ces variantes à côté de la base dans le même passage (`o` = l'a priori exact).
+
+Estimateur seul (photos simulées, corrélation 0,7) : Puzzle-Map 59 à 76 % des cases posées retrouvées, banque d'images 34 à
+43 % (beaucoup de cases peu texturées), 0 à 2 % de cases nues déclarées posées.
+
+Puzzle-Map, 643 photos, case exacte (Mac Intel, **réseau inopérant, voir plus bas**) :
+
+| Variante | Case exacte | 4 pistes | Cases posées retrouvées | Pièce en main déclarée posée |
+|---|---|---|---|---|
+| Base | 39 % | 78 % | | |
+| 30 % posé, estimé | 39 % | 77 % | 58 % | 3 / 154 |
+| 60 % posé, estimé | 40 % | 78 % | 72 % | 6 / 154 |
+| 30 % posé, exact | 46 % | 79 % | 100 % | 0 |
+| 60 % posé, exact | 49 % | 80 % | 100 % | 0 |
+
+Banque d'images : non mesurée (même problème de réseau, PC distant injoignable).
+
+Lecture : l'a priori exact vaut 7 à 10 points ; estimé, il n'en apporte que 0 à 1, car l'estimateur reste prudent. Décision :
+**pas gardé dans l'app** (règle des deux bancs non remplie, et il manque le cadrage de la photo d'avancement dans l'interface).
+Le code reste sur la branche `feat/progress-prior` pour une nouvelle mesure avec un réseau qui marche.
+
+**Réseau inopérant sur le Mac Intel (JVM).** Sur ce Mac, onnxruntime Java (1.16.3, 1.17.3 et 1.19.2, JDK 17 et 21) rend le
+**même embedding pour n'importe quelle image** avec `reranker.onnx`, alors qu'onnxruntime Python 1.17.3 sur le même Mac et le
+même fichier rend des embeddings différents. Tous les bancs JVM avec `PUZZLE_RERANKER` y mesurent donc la couleur seule
+(Puzzle-Map 39 % au lieu de 84 %, rotation 29 %). Ce n'est pas un changement de code : rien n'a bougé dans l'algorithme depuis
+les mesures documentées. `TestReranker.fromEnv` refuse maintenant un réseau qui rend le même embedding pour deux images
+différentes. L'app sur téléphone utilise onnxruntime-android (autre binaire) : non vérifié ici.
+
 ## Essais rejetés ou neutres
 
 - **Affiner le réseau sur les vraies photos de Puzzle-Map** (un puzzle d'entraînement : `120_avengers`, 484 photos ;

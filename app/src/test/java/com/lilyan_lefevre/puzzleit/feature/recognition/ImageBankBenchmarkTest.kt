@@ -44,15 +44,18 @@ class ImageBankBenchmarkTest {
         assumeTrue("PUZZLE_IMAGES_DIR not set", dir != null && dir.isDirectory)
         val dump = LeadDump("bank")
         val reranker = TestReranker.fromEnv()
-        val total = Score()
-        val buckets = linkedMapOf("textured (<15% flat)" to Score(), "mixed (15-40%)" to Score(), "flat-heavy (>40%)" to Score())
+        // One score set per variant: the baseline, then each simulated progress photo (SimulatedProgress), on the same pieces.
+        val variants = SimulatedProgress.variants
+        val totals = variants.map { Score() }
+        val bucketNames = listOf("textured (<15% flat)", "mixed (15-40%)", "flat-heavy (>40%)")
+        val buckets = variants.map { List(3) { Score() } }
         val rows = ArrayList<Pair<Int, String>>()
         for (f in dir!!.listFiles()!!.filter { it.name.endsWith(".bmp") }.sortedBy { it.name }) {
             val img = Bmp.load(f)
             val matcher = PieceMatcher(img, 500, reranker = reranker, useNcc = TestReranker.useNcc, segmenter = TestReranker.segmenter)
             val g = matcher.grid
             val rnd = Random(f.name.hashCode().toLong())
-            val score = Score()
+            val scores = variants.map { Score() }
             val cells = ArrayList<Pair<Int, Int>>()
             // 24 pieces per image: the 4 corners, 6 edge pieces (sides in turn), 14 interior pieces.
             listOf(0 to 0, g.cols - 1 to 0, g.cols - 1 to g.rows - 1, 0 to g.rows - 1).forEach(cells::add)
@@ -60,6 +63,7 @@ class ImageBankBenchmarkTest {
                 0 -> 1 + rnd.nextInt(g.cols - 2) to 0; 1 -> g.cols - 1 to 1 + rnd.nextInt(g.rows - 2)
                 2 -> 1 + rnd.nextInt(g.cols - 2) to g.rows - 1; else -> 0 to 1 + rnd.nextInt(g.rows - 2) } }
             repeat(14) { cells += 1 + rnd.nextInt(g.cols - 2) to 1 + rnd.nextInt(g.rows - 2) }
+            val priors = variants.map { it?.prior(img, g, cells.map { (c, r) -> r * g.cols + c }.toSet(), f.name.hashCode() + 1L) }
             for ((i, cell) in cells.withIndex()) {
                 val (col, row) = cell
                 val cw = img.w / g.cols.toFloat()
@@ -72,7 +76,7 @@ class ImageBankBenchmarkTest {
                     table = tables[rnd.nextInt(tables.size)],
                 )
                 val photo = PiecePhotos.photo(img, g, col, row, shot)
-                score.n++
+                scores.forEach { it.n++ }
                 if (dump.enabled) {
                     val ins = matcher.inspect(photo)
                     val mask = ins.mask
@@ -82,25 +86,34 @@ class ImageBankBenchmarkTest {
                         dump.add(f, g, cut, col, row, (360 - shot.deg.toInt()) % 360, lm)
                     }
                 }
-                val m = (matcher.locate(photo, leads = 8) as? Analysis.Found)?.match ?: continue
-                score.found++
-                val wantKind = when { i < 4 -> PieceKind.CORNER; i < 10 -> PieceKind.EDGE; else -> PieceKind.INTERIOR }
-                if (m.kind == wantKind) score.kind++
-                fun near(c: Candidate) = abs(c.col - (col + .5f)) <= 1.01f && abs(c.row - (row + .5f)) <= 1.01f
-                if (hypot(m.best.col - (col + .5f), m.best.row - (row + .5f)) <= 0.51f) score.exact++
-                if (near(m.best)) score.near++
-                if ((listOf(m.best) + m.alternatives).take(4).any(::near)) score.top4++
-                TestReranker.calib("bank", m, col + .5f, row + .5f)
-                val want = (360 - shot.deg.toInt()) % 360
-                if (abs(((m.best.rotationDeg - want) % 360 + 540) % 360 - 180) <= 10) score.rot++
+                for ((vi, score) in scores.withIndex()) {
+                    matcher.placed = priors[vi]
+                    val m = (matcher.locate(photo, leads = 8) as? Analysis.Found)?.match ?: continue
+                    score.found++
+                    val wantKind = when { i < 4 -> PieceKind.CORNER; i < 10 -> PieceKind.EDGE; else -> PieceKind.INTERIOR }
+                    if (m.kind == wantKind) score.kind++
+                    fun near(c: Candidate) = abs(c.col - (col + .5f)) <= 1.01f && abs(c.row - (row + .5f)) <= 1.01f
+                    if (hypot(m.best.col - (col + .5f), m.best.row - (row + .5f)) <= 0.51f) score.exact++
+                    if (near(m.best)) score.near++
+                    if ((listOf(m.best) + m.alternatives).take(4).any(::near)) score.top4++
+                    if (vi == 0) TestReranker.calib("bank", m, col + .5f, row + .5f)
+                    val want = (360 - shot.deg.toInt()) % 360
+                    if (abs(((m.best.rotationDeg - want) % 360 + 540) % 360 - 180) <= 10) score.rot++
+                }
             }
-            total.add(score)
             val flat = flatness(img, g)
-            buckets.values.elementAt(when { flat < 15 -> 0; flat <= 40 -> 1; else -> 2 }).add(score)
-            rows += flat to "BANK ${f.nameWithoutExtension.take(28).padEnd(28)} flat ${"$flat%".padStart(4)} | $score"
+            for (vi in variants.indices) {
+                totals[vi].add(scores[vi])
+                buckets[vi][when { flat < 15 -> 0; flat <= 40 -> 1; else -> 2 }].add(scores[vi])
+            }
+            rows += flat to "BANK ${f.nameWithoutExtension.take(28).padEnd(28)} flat ${"$flat%".padStart(4)} | ${scores[0]}"
         }
         rows.sortedBy { it.first }.forEach { println(it.second) }
-        buckets.forEach { (k, v) -> println("BANK ${k.padEnd(28)} ${"${v.n}".padStart(4)} pcs | $v") }
-        println("BANK ${"ALL".padEnd(28)} ${"${total.n}".padStart(4)} pcs | $total")
+        for ((vi, v) in variants.withIndex()) {
+            val tag = v?.toString() ?: "baseline".padEnd(20)
+            bucketNames.forEachIndexed { b, k -> println("BANK $tag ${k.padEnd(28)} ${"${buckets[vi][b].n}".padStart(4)} pcs | ${buckets[vi][b]}") }
+            println("BANK $tag ${"ALL".padEnd(28)} ${"${totals[vi].n}".padStart(4)} pcs | ${totals[vi]}")
+            v?.let { println(it.report()) }
+        }
     }
 }

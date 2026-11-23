@@ -29,6 +29,11 @@ object TestReranker {
         System.getenv("PUZZLE_GLOBAL")?.let { PieceMatcher.GLOBAL_EMBED = it == "1" }
         System.getenv("PUZZLE_BORDER_PENALTY")?.toFloatOrNull()?.let { PieceMatcher.BORDER_PENALTY = it }
         System.getenv("PUZZLE_EMBED_COLOUR_W")?.toDoubleOrNull()?.let { PieceMatcher.EMBED_COLOUR_WEIGHT = it }
-        return System.getenv("PUZZLE_RERANKER")?.takeIf { it.isNotBlank() }?.let { OnnxEmbedder(File(it).readBytes()) }?.let { e -> PieceReranker(e::embed) }
+        return System.getenv("PUZZLE_RERANKER")?.takeIf { it.isNotBlank() }?.let { OnnxEmbedder(File(it).readBytes()) }?.also { e ->
+            // On the Intel Mac the JVM onnxruntime once gave the same embedding for every input: the benchmarks then measured colours alone.
+            val n = 3 * PieceReranker.SIZE * PieceReranker.SIZE
+            val (a, b) = e.embed(listOf(FloatArray(n) { 0f }, FloatArray(n) { (it % 7) - 3f }))
+            check(!a.contentEquals(b)) { "the re-ranker gives the same embedding for different images: this onnxruntime is broken here, numbers would be wrong" }
+        }?.let { e -> PieceReranker(e::embed) }
     }
 }

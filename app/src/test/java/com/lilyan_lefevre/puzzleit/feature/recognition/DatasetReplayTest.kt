@@ -27,10 +27,14 @@ class DatasetReplayTest {
     private val dump = LeadDump("dataset")
     private val reranker = TestReranker.fromEnv()
 
-    private fun replay(dir: File): Pair<Score, Score> {
+    /** Colour only, then with the sides for each of [SimulatedProgress.variants] (the first = no progress photo). */
+    private fun replay(dir: File): Pair<Score, List<Score>> {
         val (cols, rows) = File(dir, "grid.txt").readText().trim().split(Regex("\\s+")).map { it.toInt() }
-        val matcher = PieceMatcher(Bmp.load(File(dir, "box.bmp")), cols * rows, Grid(cols, rows), reranker, TestReranker.useNcc)
-        val colourOnly = Score(cols * rows); val withSides = Score(cols * rows)
+        val box = Bmp.load(File(dir, "box.bmp"))
+        val matcher = PieceMatcher(box, cols * rows, Grid(cols, rows), reranker, TestReranker.useNcc)
+        val variants = SimulatedProgress.variants
+        val colourOnly = Score(cols * rows); val withSides = variants.map { Score(cols * rows) }
+        val priors = HashMap<Pair<Int, Int>, FloatArray?>()
         for (line in File(dir, "pieces.tsv").readLines().filter { it.isNotBlank() }) {
             val p = line.split('\t')
             val img = Bmp.load(File(dir, p[0]))
@@ -49,11 +53,16 @@ class DatasetReplayTest {
             if (dump.enabled) matcher.rank(lab, mask, Shape(0f, sides), LeadDump.LEADS)?.let { lm ->
                 dump.add(File(dir, "box.bmp"), Grid(cols, rows), body, col, row, want, lm)
             }
-            for ((score, shape) in listOf(colourOnly to null, withSides to Shape(0f, sides))) {
-                val evidence = if (shape != null && PieceMatcher.GLOBAL_EMBED) matcher.embedSims(body, 0f, masked = false) else null
-                val ranked = matcher.rank(lab, mask, shape, if (reranker != null && shape != null && evidence == null) PieceMatcher.RERANK_LEADS else 8, matcher.pixelSearch(img, mask), evidence) ?: continue
-                val m = if (shape != null && evidence == null) matcher.rerank(ranked, body, masked = false) else ranked
-                if (shape != null) TestReranker.calib("pm", m, col + .5f, row + .5f)
+            val evidence = if (PieceMatcher.GLOBAL_EMBED) matcher.embedSims(body, 0f, masked = false) else null
+            val runs = listOf(colourOnly to null) + withSides.map { it to Shape(0f, sides) }
+            for ((vi, run) in runs.withIndex()) {
+                val (score, shape) = run
+                // The piece in hand is never on the table: one simulated progress photo per variant and scanned cell.
+                matcher.placed = variants.getOrNull(vi - 1)?.let { v -> priors.getOrPut(vi to row * cols + col) { v.prior(box, matcher.grid, setOf(row * cols + col), dir.name.hashCode() + 1L) } }
+                val ev = if (shape != null) evidence else null
+                val ranked = matcher.rank(lab, mask, shape, if (reranker != null && shape != null && ev == null) PieceMatcher.RERANK_LEADS else 8, matcher.pixelSearch(img, mask), ev) ?: continue
+                val m = if (shape != null && ev == null) matcher.rerank(ranked, body, masked = false) else ranked
+                if (vi == 1) TestReranker.calib("pm", m, col + .5f, row + .5f)
                 score.n++
                 fun near(c: Candidate) = abs(c.col - (col + .5f)) <= 1.01f && abs(c.row - (row + .5f)) <= 1.01f
                 if (hypot(m.best.col - (col + .5f), m.best.row - (row + .5f)) <= 0.51f) score.exact++
@@ -71,13 +80,15 @@ class DatasetReplayTest {
         assumeTrue("PUZZLE_DATASET_DIR not set", root != null && root.isDirectory)
         val dirs = listOf(root!!).filter { File(it, "pieces.tsv").exists() } +
             root.listFiles()!!.filter { File(it, "pieces.tsv").exists() }.sortedBy { it.name }
-        val all = Score(0) to Score(0)
+        val variants = SimulatedProgress.variants
+        val all = Score(0) to variants.map { Score(0) }
         println("DATASET puzzle            photos cells  chance | colour only                                | + flat sides")
         for (d in dirs) {
             val (a, b) = replay(d)
-            all.first.add(a); all.second.add(b)
-            println("DATASET ${d.name.padEnd(17)} ${a.n.toString().padStart(6)} ${a.cells.toString().padStart(5)} ${"%5.1f%%".format(100f / a.cells)} | $a | $b")
+            all.first.add(a); b.forEachIndexed { i, s -> all.second[i].add(s) }
+            println("DATASET ${d.name.padEnd(17)} ${a.n.toString().padStart(6)} ${a.cells.toString().padStart(5)} ${"%5.1f%%".format(100f / a.cells)} | $a | ${b[0]}")
         }
-        println("DATASET ${"ALL".padEnd(17)} ${all.first.n.toString().padStart(6)}               | ${all.first} | ${all.second}")
+        println("DATASET ${"ALL".padEnd(17)} ${all.first.n.toString().padStart(6)}               | ${all.first} | ${all.second[0]}")
+        variants.forEachIndexed { i, v -> if (v != null) { println("DATASET $v + flat sides | ${all.second[i]}"); println(v.report()) } }
     }
 }
