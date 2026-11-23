@@ -12,7 +12,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lilyan_lefevre.puzzleit.R
 
-/** First screen when nobody is signed in: password, or one button per provider the server offers (Google...). The activity leaves it once signed in. */
+/** First screen when nobody is signed in: one button per provider the server offers (Google...). The activity leaves it once signed in. */
 @Composable
 fun LoginRoute(viewModel: AccountViewModel = hiltViewModel()) {
     val context = LocalContext.current
@@ -37,7 +37,6 @@ fun LoginRoute(viewModel: AccountViewModel = hiltViewModel()) {
         providers = providers,
         busy = busy,
         error = failed?.let { f -> f.reason?.let { stringResource(it) } ?: stringResource(R.string.sync_failed, f.detail) },
-        onSignIn = viewModel::signIn,
         onProvider = viewModel::signInWith,
     )
 }

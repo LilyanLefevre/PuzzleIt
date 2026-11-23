@@ -149,17 +149,10 @@ Commence par une photo de la boîte.</string>
     <string name="account_intro">Tes puzzles, tes scans et tes photos d\'avancement sont gardés en sécurité sur ton compte PuzzleIt et te suivent sur tous tes téléphones.</string>
     <string name="login_title">Bienvenue sur PuzzleIt</string>
     <string name="login_subtitle">Connecte-toi pour trouver la place de tes pièces.</string>
-    <string name="login_or">ou</string>
+    <string name="login_no_provider">Aucune méthode de connexion n\'est disponible pour le moment. Vérifie ta connexion et rouvre l\'appli.</string>
     <string name="continue_with">Continuer avec %1$s</string>
-    <string name="email_hint">E-mail</string>
-    <string name="password_hint">Mot de passe (8 caractères ou plus)</string>
-    <string name="show_password">Afficher</string>
-    <string name="hide_password">Masquer</string>
-    <string name="sign_in">Se connecter</string>
-    <string name="create_account">Créer le compte</string>
     <string name="sign_out">Se déconnecter</string>
     <string name="signed_in_as">Connecté en tant que %1$s</string>
     <string name="sync_failed">Le serveur répond : %1$s</string>
     <string name="server_invalid">Utilise une adresse https://, ou http:// seulement pour un serveur de ton réseau local (192.168.x.x, 10.x.x.x, nom.local).</string>
-    <string name="credentials_invalid">Saisis ton e-mail et un mot de passe de 8 caractères ou plus.</string>
 </resources>

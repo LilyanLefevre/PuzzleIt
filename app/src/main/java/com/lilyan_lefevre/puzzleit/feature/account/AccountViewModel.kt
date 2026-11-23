@@ -25,7 +25,7 @@ sealed interface Notice {
     data class Failed(@StringRes val reason: Int?, val detail: String = "") : Notice
 }
 
-/** Signing in to the PuzzleIt server built into the app (password or a provider such as Google) and syncing the puzzles with it. */
+/** Signing in to the PuzzleIt server built into the app (through a provider such as Google) and syncing the puzzles with it. */
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val client: PocketBaseClient,
@@ -42,9 +42,9 @@ class AccountViewModel @Inject constructor(
     private val _notice = MutableStateFlow<Notice?>(null)
     val notice: StateFlow<Notice?> = _notice.asStateFlow()
 
-    /** The "continue with ..." buttons: whatever the server has switched on, empty while it is unreachable. */
-    private val _providers = MutableStateFlow<List<OAuthProvider>>(emptyList())
-    val providers: StateFlow<List<OAuthProvider>> = _providers.asStateFlow()
+    /** The "continue with ..." buttons: whatever the server has switched on, empty if it is unreachable, null while asking. */
+    private val _providers = MutableStateFlow<List<OAuthProvider>?>(null)
+    val providers: StateFlow<List<OAuthProvider>?> = _providers.asStateFlow()
 
     /** A provider's page for the route to open in the browser, cleared once it did. */
     private val _openUrl = MutableStateFlow<String?>(null)
@@ -52,11 +52,6 @@ class AccountViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { _providers.value = try { client.providers(server) } catch (e: BackendException) { emptyList() } }
-    }
-
-    fun signIn(email: String, password: String, create: Boolean) {
-        if (email.isBlank() || password.length < 8) { _notice.value = Notice.Failed(R.string.credentials_invalid); return }
-        authenticate { if (create) client.register(server, email.trim(), password) else client.signIn(server, email.trim(), password) }
     }
 
     fun signInWith(provider: OAuthProvider) = authenticate { client.signInWithProvider(server, provider) { _openUrl.value = it } }
