@@ -42,7 +42,7 @@ class AccountViewModel @Inject constructor(
     private val _notice = MutableStateFlow<Notice?>(null)
     val notice: StateFlow<Notice?> = _notice.asStateFlow()
 
-    /** The "continue with ..." buttons: whatever the server has switched on, empty if it is unreachable, null while asking. */
+    /** The "continue with ..." buttons: whatever the server has switched on, null until it answered (also when it is unreachable: see [providersFailed]). */
     private val _providers = MutableStateFlow<List<OAuthProvider>?>(null)
     val providers: StateFlow<List<OAuthProvider>?> = _providers.asStateFlow()
 
@@ -50,8 +50,29 @@ class AccountViewModel @Inject constructor(
     private val _openUrl = MutableStateFlow<String?>(null)
     val openUrl: StateFlow<String?> = _openUrl.asStateFlow()
 
-    init {
-        viewModelScope.launch { _providers.value = try { client.providers(server) } catch (e: BackendException) { emptyList() } }
+    /** True while the providers are being read (first time or on retry). */
+    private val _providersLoading = MutableStateFlow(false)
+    val providersLoading: StateFlow<Boolean> = _providersLoading.asStateFlow()
+
+    /** True when the last read of the providers failed: the screen offers a retry. */
+    private val _providersFailed = MutableStateFlow(false)
+    val providersFailed: StateFlow<Boolean> = _providersFailed.asStateFlow()
+
+    init { loadProviders() }
+
+    fun loadProviders() {
+        if (_providersLoading.value) return
+        _providersLoading.value = true
+        _providersFailed.value = false
+        viewModelScope.launch {
+            try {
+                _providers.value = client.providers(server)
+            } catch (e: BackendException) {
+                _providersFailed.value = true
+            } finally {
+                _providersLoading.value = false
+            }
+        }
     }
 
     fun signInWith(provider: OAuthProvider) = authenticate { client.signInWithProvider(server, provider) { _openUrl.value = it } }
