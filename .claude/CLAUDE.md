@@ -128,7 +128,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - Tag `v<versionName>` (`app/build.gradle.kts`) -> `.github/workflows/release.yml` builds the signed APK and creates the GitHub release.
   Signing comes from the env `RELEASE_KEYSTORE_FILE/_PASSWORD`, `RELEASE_KEY_ALIAS/_PASSWORD` (repo secrets `RELEASE_KEYSTORE_BASE64` etc.); without them `assembleRelease` gives an unsigned APK.
   The keystore lives outside the repo (never commit it; lose the key and no update can be installed over an existing install: tell the owner to back it up). Where it is: `CLAUDE.local.md`.
-- `assembleRelease` needs the network (lint-gradle is not in the offline cache). The APK is ~220 MB (ONNX Runtime + OpenCV for 4 ABIs).
+- `assembleRelease` needs the network (lint-gradle is not in the offline cache). One APK per ABI (`splits`): arm64-v8a ~62 MB, x86_64 ~96 MB; `versionCode` = base x 10 + ABI (2 arm64, 3 x86_64), keep that scheme (a plain universal versionCode would no longer install over them). R8 is off: the minified instrumented tests do not run yet.
 
 ## Benchmarks (opt-in JVM tests, not in CI; data rebuilt by scripts)
 - `DatasetReplayTest` + `tools/dataset/prepare_puzzle_map.py <dir>` -> `PUZZLE_DATASET_DIR`: Puzzle-Map (CC-BY-4.0),
@@ -145,6 +145,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   as exact. Current: Famillez 30 % exact / 55 % in 4 leads (20 captures = 6 distinct pieces), La vague 1 piece of 3. Too small to tune on: do not over-fit it.
 - `RealPhotoReplayTest` -> `PUZZLE_REAL_DIR`: phone captures (`adb pull .../files/captures`) + box
   (`adb exec-out run-as com.lilyan_lefevre.puzzleit cat files/<project>/puzzle/extraites/*_warped.jpg`), BMP via sips.
+- The JVM onnxruntime on the Intel Mac returns the same embedding for every image (Python and the Android app do not): run the benchmarks on the remote PC; `TestReranker` refuses such a broken network. `OnnxNetworkDeviceTest` checks the networks on a device.
 - `PUZZLE_DUMP_DIR` makes the first two export each piece + the top-30 leads (`LeadDump`) for off-device experiments.
 
 ## Remote PC (heavy work: AI, long benchmarks)
