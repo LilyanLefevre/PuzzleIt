@@ -174,7 +174,9 @@ Bump `versionName` (and `versionCode`) in `app/build.gradle.kts`, commit, then t
 The release build talks to the production server built into it (`PUZZLEIT_SERVER`, `https://puzzleit.lilyan.app`).
 [`release.yml`](.github/workflows/release.yml) checks that the tag matches `versionName`, runs the unit tests, builds the
 APK signed with the release key (kept in the repository secrets, never committed) and publishes a GitHub release with the
-APK and generated notes.
+APKs and generated notes. There is one APK per CPU (`PuzzleIt-v<version>-arm64-v8a.apk`, `-x86_64`):
+install `arm64-v8a` on any recent phone (`x86_64` is for emulators). Each ABI has its own
+`versionCode` (base x 10 + 2 for arm64-v8a, 3 for x86_64), higher than the universal APK of v0.2.1, so it installs over it.
 
 ## Contributing
 Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`), one topic per commit, a matcher change is
