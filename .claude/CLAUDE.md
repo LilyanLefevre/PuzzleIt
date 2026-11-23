@@ -88,15 +88,14 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   (`git config user.name/email` are set to it in this clone). Never fake or backdate commit dates (refused once, the owner insisted: still no). Pushing rewritten history needs `--force-with-lease`.
 - **CI polling**: `gh run watch` and long `sleep` get reaped when the PC is short of memory; poll with `until [ "$(gh run view <id> --json status --jq .status)" = completed ]; do sleep 30; done` in the background.
   The workflow cancels in-progress runs on a new push: do not push while waiting for a result you need.
-- Repo files cannot be written from Bash/Python on this PC (`Bad file descriptor`): use the Edit/Write tools; Bash only for git/gradle/adb. Git Bash mangles `/sdcard` paths: `export MSYS_NO_PATHCONV=1`; binary files from the phone: `adb exec-out run-as ... cat`.
-- The `humanizer` skill the owner's global CLAUDE.md asks for is not installed in this session: write texts plainly and say so.
+- Binary files from the phone: `adb exec-out run-as ... cat` (machine-specific quirks: `CLAUDE.local.md`).
 - Measure before and after every matcher change on BOTH benchmarks below; keep a change only if it holds on both.
   Document results (including rejected tries) in `documentation/07-validation.md`.
 - Trace a real failure on real data before "fixing": pull the phone captures and replay them (`RealPhotoReplayTest`).
 - When merging someone else's work, check no feature became unreachable (it happened with edit/delete).
 - Dark-only theme ("puzzle night"); colours in `values/colors.xml`, strings in both `values` and `values-fr`.
 - Delete dead code instead of parking it (`.bak` files are not allowed); history keeps it.
-- Suivi local des tâches dans `tasks/` (non versionné, voir `tasks/README.md`).
+- This file holds what stays true. The current state, open tasks and session notes live outside the repo (`CLAUDE.local.md`, `tasks/`): do not add dated status sections here.
 
 ## Testing
 - Unit (JVM, JDK 21 needed by Robolectric): `./gradlew testDebugUnitTest` (includes `PieceMatcherTest`).
@@ -151,41 +150,20 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 ## Remote PC (heavy work: AI, long benchmarks)
 - A remote Windows PC with an AMD GPU (PyTorch via DirectML) runs the AI experiments and the long benchmarks; how to reach it and what is on it: `CLAUDE.local.md` (not versioned).
 
-## Known limits / next steps
-### State on 2026-10-13 (UI in Compose)
-- The whole UI is Jetpack Compose (PR #5, squash-merged), and since the `refactor/navigation-compose` branch (below) one `NavHost`, no Fragment, no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
-  Verified: JVM unit tests, the 12 `ScanFlowTest` journeys on an API 34 emulator (one at a time: the Intel Mac's emulator is slow, disable Google Play services on the AVD or it ANRs), CI on Pixel 6 + small phone, the owner built and tried it.
-  **Not verified**: a real phone, creating a puzzle with the real camera, the corner framing.
-- The app's login screen shows only the providers (Google): no email/password form, no account creation (`3582f16`).
-- README images and video (`documentation/screenshots`) were regenerated with the Compose UI (`2aa7455`) by `DemoTourTest` (`e9d449b` ported it to Compose; needs the phone or the emulator and `-e demoPuzzle`).
-- **Navigation Compose** (merged, PR #6, `b8c7046`): `Navigation.kt` (`Dest` typed routes + `PuzzleNavHost`), one `XRoute` per former Fragment, `MainActivity` = `setContent` only. See `documentation/09-compose.md`. Verified: compiles, JVM unit tests, `ScanFlowTest` on the Pixel 6 managed device: 13 of 16 journeys in the full run; of the 3 failures, 2 pass when run alone (emulator overloaded) and `resultSheetSlidesFromPeekToFullAndAwayAndBack` also fails on `main` locally (never seen green here). **Not verified**: CI, a real phone, screenshots of the new headers (create / framing).
-- Local build: the project lives in iCloud Documents; `app/build`, `build` and `.kotlin` are `*.nosync` folders with symlinks (ignored by git) so iCloud stops adding "* 2" copies. If a build still fails on one: `rm -rf app/build.nosync/*`.
-
-### State on 2026-10-11 (before v0.2.0)
-- v0.1.0 released (signed APK on GitHub, release.yml; keystore: see `CLAUDE.local.md`, to be backed up by the owner). `main` is green on CI (Pixel 6 + small phone managed devices). v0.2.0 is next:
-  bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag `v0.2.0`. Done since v0.1.0: mandatory login (+ Google and other providers), production server built in, retake of the box photo
-  (create and edit), double back arrows fixed, sync gaps closed (deletions, box photo, latest edit), new app icon (supplied PNGs, adaptive icon built with a 12 % inset; no monochrome/themed icon yet).
-- Server **in production**: PocketBase on the owner's own server behind a Cloudflare Tunnel; a push touching `server/` rebuilds the image and a self-hosted runner redeploys it (`.github/workflows/server.yml`, documented in `server/README.md`). Hosts, SSH and what runs there: `CLAUDE.local.md`.
-  The Google provider still has to be configured by the owner (Google Cloud OAuth client + PocketBase dashboard, steps in `server/README.md`); until then the login screen shows no provider button. Sign-up by password must be locked once their account exists.
-- Verified against a real local PocketBase (download its release, check the checksum, `pocketbase serve --dir <tmp> --migrationsDir server/pb_migrations --http=127.0.0.1:8095`; port 8090 is taken on the owner's PC), then
-  `POCKETBASE_URL=http://127.0.0.1:8095 ./gradlew testDebugUnitTest --tests "*SyncIntegrationTest*"` (3 scenarios) and, with a fake Google provider enabled by a temporary migration, `POCKETBASE_OAUTH_URL=... --tests "*OAuthIntegrationTest*"`.
-  OAuth gotcha found that way: the `state` sent to the provider must be the realtime client id (that is how PocketBase finds the connection to push the code to).
-- Repo files cannot be written from Bash (permission denied, also `rm`/`cp`): use Edit/Write, and PowerShell `Copy-Item`/`Remove-Item` for binaries (icons).
-- **Security rule from the owner: reuse audited pieces, invent nothing** (also in memory). Auth, hashing, tokens, file tokens, access rules = PocketBase; token = Jetpack Security
+## Architecture facts and known limits
+- UI: all Jetpack Compose, one `NavHost` (`Navigation.kt`, `Dest` typed routes), `MainActivity` = `setContent` only; `documentation/09-compose.md` explains the pieces.
+  Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`. Login screen = provider buttons only (Google), no email/password form, no account creation.
+- Server: PocketBase (`server/`, `server/README.md`); a push touching `server/` rebuilds the image and a self-hosted runner redeploys it (`.github/workflows/server.yml`). Hosts and access: `CLAUDE.local.md`.
+- **Security rule from the owner: reuse audited pieces, invent nothing.** Auth, hashing, tokens, file tokens, access rules = PocketBase; token = Jetpack Security
   `EncryptedSharedPreferences` (`AccountModule`, excluded from backups); `http://` only for private/home addresses (`isAcceptableServer`, `ServerAddressTest`).
-
-### Tasks now
-1. **Next release (v0.3.0)**, v0.2.1 is published (tag `v0.2.1`, 2026-10-11): bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag, check the release workflow, tell the owner to back up the keystore. Before: the owner configures Google, locks the sign-up, and tries the login on their phone in 4G (never done with a real Google account).
-2. Sync gaps left: no sync while the app is closed (WorkManager, a dependency to ask the owner about; the app syncs on show and when it goes to the background); a puzzle edited on two phones before they sync keeps only the later edit.
-   The login screen reads the providers once when it opens: if the server was unreachable it says so (no retry button: reopen the app).
-3. Themed (monochrome) app icon: needs a transparent silhouette of the logo, the supplied zip has none. The Play Store icon (`playstore-icon.png`, 512 px) and the iOS sets of that zip are not in the repo.
-4. Use the progress photos to help the localisation (the reason they exist), measure the box index build time on the phone for La vague (never done).
-5. Owner's phone: wireless adb drops often; run tests there with `installDebug installDebugAndroidTest` + `am instrument` (animations off, restore them after), never `connectedDebugAndroidTest`.
-- First-lead accuracy is below target on the owner's real photos (Famillez 30 %), especially on near-uniform pieces (white gutter between two photos, plain foam/sky of La vague). Tried and rejected
-  (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. Pablo Moreira's DINOv2 piece classifier
+- Sync tests against a real local PocketBase: download its release, check the checksum, `pocketbase serve --dir <tmp> --migrationsDir server/pb_migrations --http=127.0.0.1:8095`, then
+  `POCKETBASE_URL=http://127.0.0.1:8095 ./gradlew testDebugUnitTest --tests "*SyncIntegrationTest*"` and, with a fake Google provider enabled by a temporary migration, `POCKETBASE_OAUTH_URL=... --tests "*OAuthIntegrationTest*"`.
+  OAuth gotcha: the `state` sent to the provider must be the realtime client id (that is how PocketBase finds the connection to push the code to).
+- Sync limits: no sync while the app is closed (WorkManager would need the owner's OK); a puzzle edited on two phones before they sync keeps only the later edit.
+- Accuracy: first lead is below target on the owner's real photos, worst on near-uniform pieces (white gutter between two photos, plain foam/sky). Tried and rejected
+  (`documentation/07`, `08`): fine-tuning on Puzzle-Map real photos (hand-held; hurt the owner's table photos), naive log-colour matching, the full U2-Net. A DINOv2 piece classifier
   (363 MB, not embeddable) finds the white-gutter piece our model never finds: a patch-level cross-attention head is the research lead.
-- The box index (up to ~3,900 embeddings for 1,000 pieces) is built in the background on the phone: its build time there is not measured yet.
-- The project lives in iCloud Documents: iCloud used to create `* 2.*` duplicates in `app/build` and Gradle failed (`parseDebugLocalResources`, `hiltJavaCompileDebug`). The build folders are now `*.nosync` (see the 2026-10-13 state); moving the project out of iCloud would fix it for good.
 - onnxruntime sessions run WITHOUT memory pattern and CPU arena (`OnnxEmbedder`, `OnnxSegmenter`): the batches have many different sizes and
   with them native memory grew 30 MB per scan (408 MB after the box index) until a 2 GB device killed the app. `PieceRecognizerDeviceTest` prints the memory.
 - Leads 2-4 get a derived confidence (best confidence scaled by their own score).
+- Local build in iCloud Documents: `build`, `app/build`, `.kotlin` are `*.nosync` folders behind symlinks (ignored by git) so iCloud stops adding "* 2" copies; if a build still fails on one: `rm -rf app/build.nosync/*`.
