@@ -96,6 +96,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 - When merging someone else's work, check no feature became unreachable (it happened with edit/delete).
 - Dark-only theme ("puzzle night"); colours in `values/colors.xml`, strings in both `values` and `values-fr`.
 - Delete dead code instead of parking it (`.bak` files are not allowed); history keeps it.
+- Suivi local des tâches dans `tasks/` (non versionné, voir `tasks/README.md`).
 
 ## Testing
 - Unit (JVM, JDK 21 needed by Robolectric): `./gradlew testDebugUnitTest` (includes `PieceMatcherTest`).
@@ -154,9 +155,10 @@ The owner speaks French: talk to them in French; code, comments and commit messa
 ### State on 2026-10-13 (UI in Compose)
 - The whole UI is Jetpack Compose (PR #5, squash-merged), and since the `refactor/navigation-compose` branch (below) one `NavHost`, no Fragment, no `res/layout`, `documentation/09-compose.md` explains the pieces for a Compose beginner. Still Views behind `AndroidView`: `PuzzleMapView`, `QuadSelectionView`, CameraX `PreviewView`.
   Verified: JVM unit tests, the 12 `ScanFlowTest` journeys on an API 34 emulator (one at a time: the Intel Mac's emulator is slow, disable Google Play services on the AVD or it ANRs), CI on Pixel 6 + small phone, the owner built and tried it.
-  **Not verified**: `DemoTourTest` (ported to the accessibility tree + `input` events, never run), a real phone, creating a puzzle with the real camera, the corner framing.
-- README images and video (`documentation/screenshots`) still show the old UI: regenerate them with `DemoTourTest` (needs the phone or the emulator and `-e demoPuzzle`).
-- **Navigation Compose** (branch `refactor/navigation-compose`, not merged yet): `Navigation.kt` (`Dest` typed routes + `PuzzleNavHost`), one `XRoute` per former Fragment, `MainActivity` = `setContent` only. See `documentation/09-compose.md`. Verified: compiles, JVM unit tests, `ScanFlowTest` on the Pixel 6 managed device: 13 of 16 journeys in the full run; of the 3 failures, 2 pass when run alone (emulator overloaded) and `resultSheetSlidesFromPeekToFullAndAwayAndBack` also fails on `main` locally (never seen green here). **Not verified**: CI, a real phone, `DemoTourTest`, screenshots of the new headers (create / framing).
+  **Not verified**: a real phone, creating a puzzle with the real camera, the corner framing.
+- The app's login screen shows only the providers (Google): no email/password form, no account creation (`3582f16`).
+- README images and video (`documentation/screenshots`) were regenerated with the Compose UI (`2aa7455`) by `DemoTourTest` (`e9d449b` ported it to Compose; needs the phone or the emulator and `-e demoPuzzle`).
+- **Navigation Compose** (merged, PR #6, `b8c7046`): `Navigation.kt` (`Dest` typed routes + `PuzzleNavHost`), one `XRoute` per former Fragment, `MainActivity` = `setContent` only. See `documentation/09-compose.md`. Verified: compiles, JVM unit tests, `ScanFlowTest` on the Pixel 6 managed device: 13 of 16 journeys in the full run; of the 3 failures, 2 pass when run alone (emulator overloaded) and `resultSheetSlidesFromPeekToFullAndAwayAndBack` also fails on `main` locally (never seen green here). **Not verified**: CI, a real phone, screenshots of the new headers (create / framing).
 - Local build: the project lives in iCloud Documents; `app/build`, `build` and `.kotlin` are `*.nosync` folders with symlinks (ignored by git) so iCloud stops adding "* 2" copies. If a build still fails on one: `rm -rf app/build.nosync/*`.
 
 ### State on 2026-10-11 (before v0.2.0)
@@ -173,7 +175,7 @@ The owner speaks French: talk to them in French; code, comments and commit messa
   `EncryptedSharedPreferences` (`AccountModule`, excluded from backups); `http://` only for private/home addresses (`isAcceptableServer`, `ServerAddressTest`).
 
 ### Tasks now
-1. **Release v0.2.0** (bump, tag, check the release workflow, tell the owner to back up the keystore). Before: the owner configures Google, locks the sign-up, and tries the login on their phone in 4G (never done with a real Google account).
+1. **Next release (v0.3.0)**, v0.2.1 is published (tag `v0.2.1`, 2026-10-11): bump `versionName` + `versionCode` in `app/build.gradle.kts`, commit, tag, check the release workflow, tell the owner to back up the keystore. Before: the owner configures Google, locks the sign-up, and tries the login on their phone in 4G (never done with a real Google account).
 2. Sync gaps left: no sync while the app is closed (WorkManager, a dependency to ask the owner about; the app syncs on show and when it goes to the background); a puzzle edited on two phones before they sync keeps only the later edit.
    The login screen reads the providers once when it opens: if the server was unreachable it says so (no retry button: reopen the app).
 3. Themed (monochrome) app icon: needs a transparent silhouette of the logo, the supplied zip has none. The Play Store icon (`playstore-icon.png`, 512 px) and the iOS sets of that zip are not in the repo.
